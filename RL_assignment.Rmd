@@ -1,0 +1,38 @@
+---
+title: "Reinforcement Learning Group Assignment"
+author: "Group ..."
+date: "Februra 2024"
+output:
+  pdf_document:
+    fig_caption: yes
+header-includes:
+  \usepackage{float}
+  \usepackage{booktabs} % To thicken table lines
+  \usepackage{unicode-math}
+
+---
+
+```{r, echo = T, results = 'hide', message=FALSE}
+
+# Packes required for subsequent analysis. P_load ensures these will be installed and loaded.
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(dplyr,
+               tidyr,
+               ggplot2,
+               reshape2,
+               latex2exp
+               )
+
+# If you do not have tinytex installed, uncomment the command below for knitting the pdf
+#tinytex::install_tinytex()
+
+```
+
+```{r, load data}
+# reads in data full
+dfZozo40 <- read.csv('zozo_Context_40items.csv')
+dfZozo80 <- read.csv('zozo_Context_80items.csv')
+
+
+```
+
