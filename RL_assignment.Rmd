@@ -19,7 +19,9 @@ pacman::p_load(dplyr,
                tidyr,
                ggplot2,
                reshape2,
-               latex2exp
+               latex2exp,
+               xtable,
+               urca
                )
 
 # If you do not have tinytex installed, uncomment the command below for knitting the pdf
@@ -31,8 +33,6 @@ pacman::p_load(dplyr,
 # reads in data full
 dfZozo40 <- read.csv('zozo_Context_40items.csv')
 dfZozo80 <- read.csv('zozo_Context_80items.csv')
-
-
 ```
 
 
@@ -70,16 +70,16 @@ test_results_df <- data.frame()
 # Loop over columns starting from the second column
 for (i in 2:ncol(result)) {
   # Apply ADF test to the current column
-  test_result <- ur.df(result[[3]], type = "none", selectlags = "AIC")
+  test_result <- ur.df(result[[i]], type = "none", selectlags = "AIC")
   # Extract the test statistic from the ADF test result and store in the dataframe
   test_statistic <- test_result@teststat
   critical_values <- as.numeric(test_result@cval[2])
   
   # Compare the test statistic with the critical values
   if (test_statistic > critical_values) {
-    stationarity <- "Stationary"
+    stationarity <- "No"
   } else {
-    stationarity <- "Non-Stationary"
+    stationarity <- "Yes"
   }
   
   # Store the results in the dataframe
@@ -90,4 +90,15 @@ for (i in 2:ncol(result)) {
 
 # Print the dataframe containing test results
 print(test_results_df) # stationary if the value is lower than the threshold -1.95 (0.05 significance level)
+
+# Print the dataframe containing test results
+print(xtable(test_results_df), include.rownames = FALSE)
+
+# Reformating for generating table
+split_dfs <- lapply(seq(1, nrow(test_results_df), by = 20), function(i) test_results_df[i:min(i+19, nrow(df)), ])
+combined_df <- as.data.frame(split_dfs)
+
+# Print the dataframe and generate Latex code
+print(combined_df)
+#print(xtable(combined_df), include.rownames = FALSE)
 ```
