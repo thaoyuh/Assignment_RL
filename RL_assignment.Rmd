@@ -64,17 +64,30 @@ print(result)
 # Load necessary libraries
 library(urca)
 
-# Initialize an empty dataframe to store test statistics
-test_statistics_df <- data.frame()
+# Initialize an empty dataframe to store test results
+test_results_df <- data.frame()
 
 # Loop over columns starting from the second column
 for (i in 2:ncol(result)) {
   # Apply ADF test to the current column
-  test_result <- ur.df(result[[i]], type = "none", selectlags = "AIC")
+  test_result <- ur.df(result[[3]], type = "none", selectlags = "AIC")
   # Extract the test statistic from the ADF test result and store in the dataframe
-  test_statistics_df <- rbind(test_statistics_df, data.frame(Item = colnames(result)[i], Test_Statistic = test_result@teststat))
+  test_statistic <- test_result@teststat
+  critical_values <- as.numeric(test_result@cval[2])
+  
+  # Compare the test statistic with the critical values
+  if (test_statistic > critical_values) {
+    stationarity <- "Stationary"
+  } else {
+    stationarity <- "Non-Stationary"
+  }
+  
+  # Store the results in the dataframe
+  test_results_df <- rbind(test_results_df, data.frame(Item = colnames(result)[i], 
+                                                      Test_Statistic = test_statistic,
+                                                      Stationarity = stationarity))
 }
 
-# Print the dataframe containing test statistics
-print(test_statistics_df)  # stationary if the value is lower than the threshold -1.95 (0.05 significance level)
+# Print the dataframe containing test results
+print(test_results_df) # stationary if the value is lower than the threshold -1.95 (0.05 significance level)
 ```
