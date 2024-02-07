@@ -13,7 +13,6 @@ header-includes:
 ---
 
 ```{r, echo = T, results = 'hide', message=FALSE}
-
 # Packes required for subsequent analysis. P_load ensures these will be installed and loaded.
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load(dplyr,
@@ -36,3 +35,46 @@ dfZozo80 <- read.csv('zozo_Context_80items.csv')
 
 ```
 
+
+
+
+
+\section*{Question d)}
+```{r }
+# Load necessary libraries
+library(lubridate)
+
+# Assuming your dataframe is named dfZozo40
+# Convert timestamp column to date
+dfZozo40$date <- as.Date(dfZozo40$timestamp)
+dfZozo40$hour <- hour(dfZozo40$timestamp)
+
+# Group by items per hour and item, count the proportion of 1 occurrences in the click column
+result <- dfZozo40 %>%
+  group_by(date, item_id) %>%
+  summarize(proportion_1 = mean(click == 1, na.rm = TRUE)) %>%
+  ungroup() %>%
+  spread(key = item_id, value = proportion_1, fill = 0)
+
+# View the result
+print(result)
+```
+
+```{r stationarity testing} 
+# Load necessary libraries
+library(urca)
+
+# Initialize an empty dataframe to store test statistics
+test_statistics_df <- data.frame()
+
+# Loop over columns starting from the second column
+for (i in 2:ncol(result)) {
+  # Apply ADF test to the current column
+  test_result <- ur.df(result[[i]], type = "none", selectlags = "AIC")
+  # Extract the test statistic from the ADF test result and store in the dataframe
+  test_statistics_df <- rbind(test_statistics_df, data.frame(Item = colnames(result)[i], Test_Statistic = test_result@teststat))
+}
+
+# Print the dataframe containing test statistics
+print(test_statistics_df)  # stationary if the value is lower than the threshold -1.95 (0.05 significance level)
+```
