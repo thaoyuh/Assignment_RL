@@ -9,7 +9,7 @@ pacman::p_load(knitr, ggplot2, png,
                fastDummies)
 
 # get the dataframe from the csv file
-df_zozo <- read.csv("zozo_Context_40items.csv")
+df_zozo <- read.csv("zozo_Context_80items.csv")
 
 source("toolbox.R")
 
@@ -44,7 +44,7 @@ df_zozo$user_feature_3 <- as.numeric(df_zozo$user_feature_3)
 
 # turn user features into dummies
 # df_zozo <- dummy_cols(df_zozo, select_columns = c("user_feature_0", "user_feature_1", 
-                        "user_feature_2", "user_feature_3"), remove_first_dummy = TRUE)
+#                        "user_feature_2", "user_feature_3"), remove_first_dummy = TRUE)
 
 #############################
 ## Thompson Sampling
@@ -128,3 +128,75 @@ ggplot(df_TS_vanilla_agg, aes(x = t, y = mean_cum_reward)) +
 #############################
 ## UCB
 #############################
+
+
+#############################
+## Thompson Sampling sensitivity analysis
+#############################
+
+## Alphas values
+alpha_values <- seq(0.01, 5, length.out = 7)
+average_rewards <- vector("list", length(alpha_values))
+
+# Loop over each alpha value
+for (i in seq_along(alpha_values)) {
+    policy_TS_vanilla <- ThompsonSamplingPolicy$new(alpha = alpha_values[i])
+    agent_TS_contextual <- Agent$new(policy_TS_vanilla, # add policy
+                                     bandit_TS_vanilla) # add bandit
+    # initialize the simulator
+    sim_TS_vanilla <- Simulator$new(agent_TS_vanilla, # set our agent
+                                    horizon = size_sim, # set size of sim
+                                    do_parallel = TRUE, # run in parallel
+                                    simulations = 1)  # simulate it n_sim times
+    
+    # Run the simulation for the current alpha value
+    history_TS_vanilla <- sim_TS_vanilla$run()
+    
+    # gather results
+    df_TS_vanilla <- history_TS_vanilla$data %>%
+      select(t, sim, choice, reward, agent)
+    
+    # Calculate the average rewards for the first 700 steps
+    avg_reward <- mean(history_TS_vanilla$data$reward[history_TS_vanilla$data$t <= 700])
+    
+    # Store the average reward for the current alpha value
+    average_rewards[[i]] <- avg_reward
+}
+print(average_rewards)
+
+## Betas values
+beta_values <- seq(0.01, 5, length.out = 7)
+average_rewards_beta <- vector("list", length(beta_values))
+
+for (i in seq_along(beta_values)) {
+  policy_TS_vanilla <- ThompsonSamplingPolicy$new(alpha = beta_values[i])
+  agent_TS_contextual <- Agent$new(policy_TS_vanilla, # add policy
+                                   bandit_TS_vanilla) # add bandit
+  # initialize the simulator
+  sim_TS_vanilla <- Simulator$new(agent_TS_vanilla, # set our agent
+                                  horizon = size_sim, # set size of sim
+                                  do_parallel = TRUE, # run in parallel
+                                  simulations = 1)  # simulate it n_sim times
+  
+  # Run the simulation for the current alpha value
+  history_TS_vanilla <- sim_TS_vanilla$run()
+  
+  # Calculate the average rewards for the first 700 steps
+  avg_reward <- mean(history_TS_vanilla$data$reward[history_TS_vanilla$data$t <= 700])
+  
+  # Store the average reward for the current alpha value
+  average_rewards_beta[[i]] <- avg_reward
+}
+print(average_rewards_beta)
+
+average_rewards
+
+# Plot average_rewards and average_rewards_beta against alpha_values
+plot(alpha_values, average_rewards, type = "l", lwd = 6, col = rgb(0, 0, 1, alpha = 0.5), xlab = "Values", ylab = "Average Rewards", main = "Average rewards over parameter values")
+lines(alpha_values, average_rewards_beta, col = rgb(1, 0, 0, alpha = 0.5), lwd = 2)
+legend("topright", 
+       legend = c(expression(paste( alpha, " values, ", beta, " fixed")), expression(paste(beta, " values, ", alpha, " fixed"))), 
+       col = c("blue", "red"), 
+       lty = 1, 
+       cex = 0.8)
+
