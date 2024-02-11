@@ -36,10 +36,41 @@ dfZozo80 <- read.csv('zozo_Context_80items.csv')
 ```
 
 
-
-
-
 \section*{Question d)}
+```{r}
+# Visualization
+# Group by date and count clicks
+click_count <- dfZozo80 %>%
+  group_by(date) %>%
+  summarise(click_count = n())
+
+# Create the plot
+ggplot(data = click_count, aes(x = date, y = click_count)) +
+  geom_line() +
+  labs(x = "Date", y = "Click Count", title = "Click Count by Date")
+
+# Group by hour and count clicks
+clicks_by_hour <- dfZozo80 %>%
+  group_by(hour) %>%
+  summarise(click_count = sum(click))
+
+# Plot
+ggplot(data = clicks_by_hour, aes(x = hour, y = click_count)) +
+  geom_line() +
+  labs(x = "Hour of the Day", y = "Click Count", title = "Click Count by Hour")
+
+# Group by hour and date
+clicks_hour_day <- dfZozo80 %>%
+  group_by(hour,date) %>%
+  summarise(click_count = sum(click))
+
+# Plot
+ggplot(data = clicks_hour_day, aes(x = hour+date, y = click_count)) +
+  geom_line() +
+  labs(x = "Time", y = "Click Count", title = "Click Count by Hour")
+```
+
+
 ```{r }
 # Load necessary libraries
 library(lubridate)
