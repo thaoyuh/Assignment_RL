@@ -21,7 +21,8 @@ pacman::p_load(dplyr,
                reshape2,
                latex2exp,
                xtable,
-               urca
+               urca,
+               lubridate
                )
 
 # If you do not have tinytex installed, uncomment the command below for knitting the pdf
@@ -35,39 +36,49 @@ dfZozo40 <- read.csv('zozo_Context_40items.csv')
 dfZozo80 <- read.csv('zozo_Context_80items.csv')
 ```
 
-
 \section*{Question d)}
 ```{r}
 # Visualization
 # Group by date and count clicks
-click_count <- dfZozo80 %>%
+click_proba <- dfZozo80 %>%
   group_by(date) %>%
-  summarise(click_count = n())
+  summarise(click_proba = mean(click))
 
 # Create the plot
-ggplot(data = click_count, aes(x = date, y = click_count)) +
+ggplot(data = click_proba, aes(x = date, y = click_proba)) +
   geom_line() +
-  labs(x = "Date", y = "Click Count", title = "Click Count by Date")
+  labs(x = "Date", y = "Click Proba", title = "Click Proba by Date")
 
 # Group by hour and count clicks
 clicks_by_hour <- dfZozo80 %>%
   group_by(hour) %>%
-  summarise(click_count = sum(click))
+  summarise(click_proba = mean(click))
 
 # Plot
-ggplot(data = clicks_by_hour, aes(x = hour, y = click_count)) +
+ggplot(data = clicks_by_hour, aes(x = hour, y = click_proba)) +
   geom_line() +
-  labs(x = "Hour of the Day", y = "Click Count", title = "Click Count by Hour")
+  labs(x = "Hour of the Day", y = "Click Proba", title = "Click Proba by Hour")
 
-# Group by hour and date
-clicks_hour_day <- dfZozo80 %>%
-  group_by(hour,date) %>%
-  summarise(click_count = sum(click))
 
-# Plot
-ggplot(data = clicks_hour_day, aes(x = hour+date, y = click_count)) +
+# Group by hour and date, and count clicks
+clicks_by_hour_date <- dfZozo80 %>%
+  group_by(date, hour) %>%
+  summarise(click_proba = mean(click))
+
+# Extract only the day component from "date"
+clicks_by_hour_date$date <- day(clicks_by_hour_date$date) 
+
+# Create a new column with hour and date
+clicks_by_hour_date <- clicks_by_hour_date %>%
+  mutate(hour_date = paste(date, hour, sep = " "))
+
+# Convert hour_date to factor to ensure evenly spaced x-axis
+clicks_by_hour_date$hour_date <- factor(clicks_by_hour_date$hour_date, levels = unique(clicks_by_hour_date$hour_date))
+
+# Plot click_count by hour_date
+ggplot(data = clicks_by_hour_date, aes(x = hour_date, y = click_proba, group = 1)) +
   geom_line() +
-  labs(x = "Time", y = "Click Count", title = "Click Count by Hour")
+  labs(x = "Hour and Date", y = "Click Proba", title = "Click Proba by Hour and Date")
 ```
 
 
@@ -77,12 +88,12 @@ library(lubridate)
 
 # Assuming your dataframe is named dfZozo40
 # Convert timestamp column to date
-dfZozo40$date <- as.Date(dfZozo40$timestamp)
-dfZozo40$hour <- hour(dfZozo40$timestamp)
+dfZozo80$date <- as.Date(dfZozo80$timestamp)
+dfZozo80$hour <- hour(dfZozo80$timestamp)
 
 # Group by items per hour and item, count the proportion of 1 occurrences in the click column
-result <- dfZozo40 %>%
-  group_by(date, item_id) %>%
+result <- dfZozo80 %>%
+  group_by(date,hour, item_id) %>%
   summarize(proportion_1 = mean(click == 1, na.rm = TRUE)) %>%
   ungroup() %>%
   spread(key = item_id, value = proportion_1, fill = 0)
