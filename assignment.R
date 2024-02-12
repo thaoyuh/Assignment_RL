@@ -7,7 +7,7 @@ pacman::p_load(
     knitr, ggplot2, png,
     tidyverse, rlist, contextual,
     lubridate, zoo, roll,
-    fastDummies
+    fastDummies, gridExtra
 )
 
 # get the dataframe from the csv file
@@ -372,81 +372,361 @@ legend("topright",
     cex = 0.8
 )
 
+## train the bandit with subgroups
+
+# read the vanilla UCB results
+df_UCB_vanilla <- read.csv("df_UCB_vanilla_max.csv")
+
+# compute the reward rate of each arm
+df_UCB_vanilla %>%
+    group_by(choice) %>%
+    summarise(reward_rate = mean(reward)) %>%
+    arrange(desc(reward_rate))
+
+# seperate df_zozo into two groups by user_feature_1
+df_zozo_1 <- df_zozo %>%
+    filter(user_feature_1 <= 3)
+
+df_zozo_2 <- df_zozo %>%
+    filter(user_feature_1 > 3)
+
+# train the bandit with the two subgroups
+bandit_UCB_vanilla_1 <- OfflineReplayEvaluatorBandit$new(click ~ item_id, df_zozo_1)
+
+bandit_UCB_vanilla_2 <- OfflineReplayEvaluatorBandit$new(click ~ item_id, df_zozo_2)
+
+# initialize the policy
+policy_UCB_vanilla_1 <- LinUCBDisjointOptimizedPolicy$new(alpha = alpha)
+
+policy_UCB_vanilla_2 <- LinUCBDisjointOptimizedPolicy$new(alpha = alpha)
+
+# create an agent to make arm choice based on the policy
+agent_UCB_vanilla_1 <- Agent$new(
+    policy_UCB_vanilla_1, # add policy
+    bandit_UCB_vanilla_1
+) # add bandit
+
+agent_UCB_vanilla_2 <- Agent$new(
+    policy_UCB_vanilla_2, # add policy
+    bandit_UCB_vanilla_2
+) # add bandit
+
+n_sim <- 100000
+
+# initialize the simulator
+sim_UCB_vanilla_1 <- Simulator$new(agent_UCB_vanilla_1, # set our agent
+    horizon = 100000, # set size of sim
+    do_parallel = TRUE, # run in parallel
+    worker_max = 5, # set the number of workers
+    simulations = 10
+) # simulate it n_sim times
+
+sim_UCB_vanilla_2 <- Simulator$new(agent_UCB_vanilla_2, # set our agent
+    horizon = 100000, # set size of sim
+    do_parallel = TRUE, # run in parallel
+    worker_max = 5, # set the number of workers
+    simulations = 10
+) # simulate it n_sim times
+
+# run the simulation
+history_UCB_vanilla_1 <- sim_UCB_vanilla_1$run()
+
+history_UCB_vanilla_2 <- sim_UCB_vanilla_2$run()
+
+# gather results
+df_UCB_vanilla_1 <- history_UCB_vanilla_1$data %>%
+    select(t, sim, choice, reward, agent)
+
+df_UCB_vanilla_2 <- history_UCB_vanilla_2$data %>%
+    select(t, sim, choice, reward, agent)
+
+df_UCB_vanilla_1_agg <- cum_reward(df_UCB_vanilla_1)
+
+df_UCB_vanilla_2_agg <- cum_reward(df_UCB_vanilla_2)
+
+# plot the two results and df_UCB_vanilla_agg in the same plot
+plot <- ggplot() +
+    geom_line(data = df_UCB_vanilla_1_agg, aes(x = t, y = mean_cum_reward, color = "subgroup1")) +
+    #geom_ribbon(data = df_UCB_vanilla_1_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "orange", alpha = 0.1) +
+    geom_line(data = df_UCB_vanilla_2_agg, aes(x = t, y = mean_cum_reward, color = "subgroup2")) +
+    #geom_ribbon(data = df_UCB_vanilla_2_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "blue", alpha = 0.1) +
+    geom_line(data = df_UCB_vanilla_agg, aes(x = t, y = mean_cum_reward, color = "all individuals")) +
+    #geom_ribbon(data = df_UCB_vanilla_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "darkolivegreen4", alpha = 0.1) +
+    scale_color_manual(values = c("subgroup1" = "orange", "subgroup2" = "blue", "all individuals" = "darkolivegreen4")) +
+    xlim(0, length(df_UCB_vanilla_1_agg$t)) +
+    ylim(0, 5) +
+    labs(x = "Rounds", y = "Cumulative Reward") +
+    theme_bw() + # set the theme
+    theme(text = element_text(size = 18))
+
+# save the plot
+ggsave("reward_subgroups.png", plot, width = 10, height = 8)
+
+# check the best arms for the two subgroups
+df_UCB_vanilla_1 %>%
+    group_by(choice) %>%
+    summarise(reward_rate = mean(reward),
+    se_reward = sd(reward)/sqrt(length(reward))) %>%
+    arrange(desc(reward_rate))
+
+df_UCB_vanilla_2 %>%
+    group_by(choice) %>%
+    summarise(reward_rate = mean(reward),
+    se_reward = sd(reward)/sqrt(length(reward))) %>%
+    arrange(desc(reward_rate))
+
+df_UCB_vanilla %>%
+    group_by(choice) %>%
+    summarise(reward_rate = mean(reward),
+    se_reward = sd(reward)/sqrt(length(reward))) %>%
+    arrange(desc(reward_rate))
+
 #############################
 ## Fairness Analysis
 #############################
 
-# use contextual TS to compute the fairness for items because it performed the best
+# read df_random and df_UCB_vanilla
+df_random <- read.csv("df_random_max.csv")
+df_UCB_vanilla <- read.csv("df_UCB_vanilla_max.csv")
+
+# trim df_random to the same length as df_UCB_vanilla
+df_random <- df_random %>%
+    filter(t <= nrow(df_UCB_vanilla))
 
 # fairness for items
 
-# count the number of exposures for each item in each simulation, then plot the mean and standard deviation of the number of exposures for each item
-df_TS_contextual %>%
-    group_by(sim, choice) %>%
-    summarise(n = n()) %>%
+# plot the number of exposures for each item
+exposure_random <- df_random %>%
     group_by(choice) %>%
-    summarise(mean_exposures = mean(n), sd_exposures = sd(n))
+    summarise(n_exposures = n()/length(unique(sim)))
 
-# plot the mean and standard deviation of the number of exposures for each item
-df_TS_contextual %>%
-    group_by(sim, choice) %>%
-    summarise(n = n()) %>%
+exposure_UCB <- df_UCB_vanilla %>%
     group_by(choice) %>%
-    summarise(mean_exposures = mean(n), sd_exposures = sd(n)) %>%
-    ggplot(aes(x = choice, y = mean_exposures)) +
-    geom_point(aes(y = mean_exposures), color = "orange") +
-    geom_errorbar(aes(ymin = mean_exposures - sd_exposures, ymax = mean_exposures + sd_exposures), width = 0.2, color = "orange") +
-    labs(x = "Item", y = "Mean number of exposures") +
-    theme_bw() + # set the theme
-    theme(text = element_text(size = 18))
+    summarise(n_exposures = n()/length(unique(sim)))
 
-# select only the first 2000 rounds, do the same analysis
-df_TS_contextual %>%
-    filter(t <= 2000) %>%
-    group_by(sim, choice) %>%
-    summarise(n = n()) %>%
-    group_by(choice) %>%
-    summarise(mean_exposures = mean(n), sd_exposures = sd(n)) %>%
-    ggplot(aes(x = choice, y = mean_exposures)) +
-    geom_point(aes(y = mean_exposures), color = "orange") +
-    geom_errorbar(aes(ymin = mean_exposures - sd_exposures, ymax = mean_exposures + sd_exposures), width = 0.2, color = "orange") +
-    labs(x = "Item", y = "Mean number of exposures") +
+# plot the number of exposures for each item for the two policies in the same plot, and save the plot
+plot1 <- ggplot() +
+    geom_point(data = exposure_random, aes(x = choice, y = n_exposures, color = "Random"), size = 2) +
+    geom_point(data = exposure_UCB, aes(x = choice, y = n_exposures, color = "UCB"), size = 2) +
+    labs(x = "Item", y = "Number of exposures") +
+    scale_color_manual(values = c("Random" = "lightblue", "UCB" = "salmon")) +
     theme_bw() + # set the theme
-    theme(text = element_text(size = 18))
+    theme(text = element_text(size = 16)) +
+    labs(title = "Throughout the rounds")
+
+# do the same analysis with only the first 1000 rounds
+
+exposure_random <- df_random %>%
+    filter(t <= 1000) %>%
+    group_by(choice) %>%
+    summarise(n_exposures = n()/length(unique(sim)))
+
+exposure_UCB <- df_UCB_vanilla %>%
+    filter(t <= 1000) %>%
+    group_by(choice) %>%
+    summarise(n_exposures = n()/length(unique(sim)))
+
+# plot the number of exposures for each item for the two policies in the same plot, and save the plot
+plot2 <- ggplot() +
+  geom_point(data = exposure_random, aes(x = choice, y = n_exposures, color = "Random"), size = 2) +
+  geom_point(data = exposure_UCB, aes(x = choice, y = n_exposures, color = "UCB"), size = 2) +
+  labs(x = "Item", y = "Number of exposures") +
+  scale_color_manual(values = c("Random" = "lightblue", "UCB" = "salmon")) +
+  theme_bw() + # set the theme
+  theme(text = element_text(size = 16)) +
+  labs(title = "First 1000 rounds")
+
+# put plot1 and plot2 in the same plot horizontally and save it
+combined_plot <- grid.arrange(plot1, plot2, ncol = 2)
+
+# save the plot
+ggsave("exposures.png", combined_plot, width = 16, height = 8)
 
 # fairness for users (compare how the best arm selected by the bandit performs for different user features)
 
-# compute the reward rate per arm
-df_TS_contextual %>%
-    group_by(choice) %>%
-    summarise(reward_rate = mean(reward))
+# Vanilla UCB
 
-# select the best arm (highest reward rate)
-best_arm <- df_TS_contextual %>%
-    group_by(choice) %>%
-    summarise(reward_rate = mean(reward)) %>%
-    arrange(desc(reward_rate)) %>%
-    head(1)
+# turn user_feature_0,1,2,3 into dummies
+df_zozo <- dummy_cols(df_zozo, select_columns = c("user_feature_0", "user_feature_1",
+    "user_feature_2", "user_feature_3"), remove_first_dummy = TRUE)
 
-df_best_arm <- df_zozo %>%
-    filter(item_id == best_arm$choice)
+bandit_UCB_vanilla <- OfflineReplayEvaluatorBandit$new(click ~ item_id | user_feature_0_2 + 
+                                                        user_feature_0_3 + user_feature_0_4 +
+                                                        user_feature_1_2 + user_feature_1_3 +
+                                                        user_feature_1_4 + user_feature_1_5 +
+                                                        user_feature_1_6 + user_feature_2_2 +
+                                                        user_feature_2_3 + user_feature_2_4 +
+                                                        user_feature_2_5 + user_feature_2_6 +
+                                                        user_feature_2_7 + user_feature_2_8 +
+                                                        user_feature_2_9 + user_feature_2_10 +
+                                                        user_feature_3_2 + user_feature_3_3 +
+                                                        user_feature_3_4 + user_feature_3_5 +
+                                                        user_feature_3_6 + user_feature_3_7 +
+                                                        user_feature_3_8 + user_feature_3_9 +
+                                                        user_feature_3_10, df_zozo)
 
-# test whether the reward rate is the same for each user feature
-df_best_arm %>%
+# initialize the policy
+### !!
+# Parameters for tuning:
+# - alpha: the coefficient for the confidence interval
+alpha <- 0.2
+policy_UCB_vanilla <- UCB2Policy$new(alpha = alpha)
+
+# create an agent to make arm choice based on the policy
+agent_UCB_vanilla <- Agent$new(
+    policy_UCB_vanilla, # add policy
+    bandit_UCB_vanilla
+) # add bandit
+
+# initialize the simulator
+sim_UCB_vanilla <- Simulator$new(agent_UCB_vanilla, # set our agent
+    horizon = size_sim, # set size of sim
+    do_parallel = TRUE, # run in parallel
+    worker_max = 5, # set the number of workers
+    simulations = n_sim,
+    save_context = TRUE
+) # simulate it n_sim times
+
+# run the simulation
+history_UCB_vanilla <- sim_UCB_vanilla$run()
+
+# save history_UCB_vanilla to R data
+save(history_UCB_vanilla, file = "history_UCB_vanilla.RData")
+
+# gather results
+df_UCB_vanilla <- history_UCB_vanilla$data
+
+# transform the dummy variables (X.2, X.3, X.4) into one variable
+df_UCB_vanilla <- df_UCB_vanilla %>%
+    mutate(user_feature_0 = ifelse(X.2 == 1, 2, ifelse(X.3 == 1, 3, ifelse(X.4 == 1, 4, 1))))
+
+# transform the dummy variables (X.5, X.6, X.7, X.8, X.9) into one variable
+df_UCB_vanilla <- df_UCB_vanilla %>%
+    mutate(user_feature_1 = ifelse(X.5 == 1, 2, ifelse(X.6 == 1, 3, ifelse(X.7 == 1, 4, ifelse(X.8 == 1, 5, ifelse(X.9 == 1, 6, 1))))))
+
+# transform the dummy variables (X.10, X.11, X.12, X.13, X.14, X.15, X.16, X.17, X.18) into one variable
+df_UCB_vanilla <- df_UCB_vanilla %>%
+    mutate(user_feature_2 = ifelse(X.10 == 1, 2, ifelse(X.11 == 1, 3, ifelse(X.12 == 1, 4, ifelse(X.13 == 1, 5, ifelse(X.14 == 1, 6, ifelse(X.15 == 1, 7, ifelse(X.16 == 1, 8, ifelse(X.17 == 1, 9, ifelse(X.18 == 1, 10, 1))))))))))
+
+# transform the dummy variables (X.19, X.20, X.21, X.22, X.23, X.24, X.25, X.26, X.27) into one variable
+df_UCB_vanilla <- df_UCB_vanilla %>%
+    mutate(user_feature_3 = ifelse(X.19 == 1, 2, ifelse(X.20 == 1, 3, ifelse(X.21 == 1, 4, ifelse(X.22 == 1, 5, ifelse(X.23 == 1, 6, ifelse(X.24 == 1, 7, ifelse(X.25 == 1, 8, ifelse(X.26 == 1, 9, ifelse(X.27 == 1, 10, 1))))))))))
+
+# compare fairness across user_feature_0
+
+# compute the reward rate for different user_feature_0
+df1_reward <- df_UCB_vanilla %>%
     group_by(user_feature_0) %>%
-    summarise(reward_rate = mean(click))
+    summarise(reward_rate = mean(reward), 
+    se = sd(reward)/sqrt(length(reward)))
 
-# see user_feature_1
-df_best_arm %>%
+df2_reward <- df_zozo %>%
+    group_by(user_feature_0) %>%
+    summarise(reward_rate = mean(click),
+    se = sd(click)/sqrt(length(click)))
+
+# plot the mean reward rate for different user_feature_0 in the two dataframes in the same plot, with error bars
+plot1 <- ggplot() +
+    geom_point(data = df1_reward, aes(x = user_feature_0, y = reward_rate, color = "UCB"), size = 2.5) +
+    geom_errorbar(data = df1_reward, aes(x = user_feature_0, ymin = reward_rate - 1.96 * se, ymax = reward_rate + 1.96 * se, color = "UCB"), width = 0.2) +
+    geom_point(data = df2_reward, aes(x = user_feature_0, y = reward_rate, color = "Overall"), size = 2.5) +
+    geom_errorbar(data = df2_reward, aes(x = user_feature_0, ymin = reward_rate - 1.96 * se, ymax = reward_rate + 1.96 * se, color = "Overall"), width = 0.2) +
+    labs(x = "User feature 0", y = "Reward rate") +
+    scale_color_manual(values = c("UCB" = "salmon", "Overall" = "darkolivegreen4")) +
+    theme_bw() + # set the theme
+    theme(text = element_text(size = 16))
+
+# save the plot
+ggsave("user_feature_0.png", plot1, width = 8, height = 6)
+
+# ANOVA test to see if the reward rate is the same for each user_feature_0
+aov_UCB_vanilla_0 <- aov(reward ~ user_feature_0, data = df_UCB_vanilla)
+summary(aov_UCB_vanilla)
+
+# test for user_feature_1
+df1_reward <- df_UCB_vanilla %>%
     group_by(user_feature_1) %>%
-    summarise(reward_rate = mean(click))
+    summarise(reward_rate = mean(reward), 
+    se = sd(reward)/sqrt(length(reward)))
 
-# see user_feature_2
-df_best_arm %>%
+df2_reward <- df_zozo %>%
+    group_by(user_feature_1) %>%
+    summarise(reward_rate = mean(click),
+    se = sd(click)/sqrt(length(click)))
+
+# plot the mean reward rate for different user_feature_1 in the two dataframes in the same plot, with error bars
+plot2 <- ggplot() +
+    geom_point(data = df1_reward, aes(x = user_feature_1, y = reward_rate, color = "UCB"), size = 2.5) +
+    geom_errorbar(data = df1_reward, aes(x = user_feature_1, ymin = reward_rate - 1.96 * se, ymax = reward_rate + 1.96 * se, color = "UCB"), width = 0.2) +
+    geom_point(data = df2_reward, aes(x = user_feature_1, y = reward_rate, color = "Overall"), size = 2.5) +
+    geom_errorbar(data = df2_reward, aes(x = user_feature_1, ymin = reward_rate - 1.96 * se, ymax = reward_rate + 1.96 * se, color = "Overall"), width = 0.2) +
+    labs(x = "User feature 1", y = "Reward rate") +
+    scale_color_manual(values = c("UCB" = "salmon", "Overall" = "darkolivegreen4")) +
+    theme_bw() + # set the theme
+    theme(text = element_text(size = 16))
+
+# save the plot
+ggsave("user_feature_1.png", plot2, width = 8, height = 6)
+
+# ANOVA test to see if the reward rate is the same for each user_feature_1
+aov_UCB_vanilla_1 <- aov(reward ~ user_feature_1, data = df_UCB_vanilla)
+summary(aov_UCB_vanilla_1)
+
+# test for user_feature_2
+df1_reward <- df_UCB_vanilla %>%
     group_by(user_feature_2) %>%
-    summarise(reward_rate = mean(click))
+    summarise(reward_rate = mean(reward), 
+    se = sd(reward)/sqrt(length(reward)))
 
-# see user_feature_3
-df_best_arm %>%
+df2_reward <- df_zozo %>%
+    group_by(user_feature_2) %>%
+    summarise(reward_rate = mean(click),
+    se = sd(click)/sqrt(length(click)))
+
+# plot the mean reward rate for different user_feature_2 in the two dataframes in the same plot, with error bars
+plot3 <- ggplot() +
+    geom_point(data = df1_reward, aes(x = user_feature_2, y = reward_rate, color = "UCB"), size = 2.5) +
+    geom_errorbar(data = df1_reward, aes(x = user_feature_2, ymin = reward_rate - 1.96 * se, ymax = reward_rate + 1.96 * se, color = "UCB"), width = 0.2) +
+    geom_point(data = df2_reward, aes(x = user_feature_2, y = reward_rate, color = "Overall"), size = 2.5) +
+    geom_errorbar(data = df2_reward, aes(x = user_feature_2, ymin = reward_rate - 1.96 * se, ymax = reward_rate + 1.96 * se, color = "Overall"), width = 0.2) +
+    labs(x = "User feature 2", y = "Reward rate") +
+    scale_color_manual(values = c("UCB" = "salmon", "Overall" = "darkolivegreen4")) +
+    theme_bw() + # set the theme
+    theme(text = element_text(size = 16))
+
+# save the plot
+ggsave("user_feature_2.png", plot3, width = 8, height = 6)
+
+# ANOVA test to see if the reward rate is the same for each user_feature_2
+aov_UCB_vanilla_2 <- aov(reward ~ user_feature_2, data = df_UCB_vanilla)
+summary(aov_UCB_vanilla_2)
+
+# test for user_feature_3
+df1_reward <- df_UCB_vanilla %>%
     group_by(user_feature_3) %>%
-    summarise(reward_rate = mean(click))
+    summarise(reward_rate = mean(reward), 
+    se = sd(reward)/sqrt(length(reward)))
+
+df2_reward <- df_zozo %>%
+    group_by(user_feature_3) %>%
+    summarise(reward_rate = mean(click),
+    se = sd(click)/sqrt(length(click)))
+
+# plot the mean reward rate for different user_feature_3 in the two dataframes in the same plot, with error bars
+plot4 <- ggplot() +
+    geom_point(data = df1_reward, aes(x = user_feature_3, y = reward_rate, color = "UCB"), size = 2.5) +
+    geom_errorbar(data = df1_reward, aes(x = user_feature_3, ymin = reward_rate - 1.96 * se, ymax = reward_rate + 1.96 * se, color = "UCB"), width = 0.2) +
+    geom_point(data = df2_reward, aes(x = user_feature_3, y = reward_rate, color = "Overall"), size = 2.5) +
+    geom_errorbar(data = df2_reward, aes(x = user_feature_3, ymin = reward_rate - 1.96 * se, ymax = reward_rate + 1.96 * se, color = "Overall"), width = 0.2) +
+    labs(x = "User feature 3", y = "Reward rate") +
+    scale_color_manual(values = c("UCB" = "salmon", "Overall" = "darkolivegreen4")) +
+    theme_bw() + # set the theme
+    theme(text = element_text(size = 16))
+
+# save the plot
+ggsave("user_feature_3.png", plot4, width = 8, height = 6)
+
+# ANOVA test to see if the reward rate is the same for each user_feature_3
+aov_UCB_vanilla_3 <- aov(reward ~ user_feature_3, data = df_UCB_vanilla)
+summary(aov_UCB_vanilla_3)
+
