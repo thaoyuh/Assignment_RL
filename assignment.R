@@ -7,7 +7,8 @@ pacman::p_load(
     knitr, ggplot2, png,
     tidyverse, rlist, contextual,
     lubridate, zoo, roll,
-    fastDummies, gridExtra
+    fastDummies, gridExtra,
+    stats
 )
 
 # get the dataframe from the csv file
@@ -44,6 +45,10 @@ unique(df_zozo$user_feature_3)
 df_zozo$user_feature_3 <- as.factor(df_zozo$user_feature_3)
 df_zozo$user_feature_3 <- as.numeric(df_zozo$user_feature_3)
 
+# turn user features into dummies
+df_zozo <- dummy_cols(df_zozo, select_columns = c("user_feature_0", "user_feature_1",
+                       "user_feature_2", "user_feature_3"), remove_first_dummy = TRUE)
+
 # check the number of repeats for each item
 df_zozo %>%
     group_by(item_id) %>%
@@ -57,10 +62,6 @@ df_zozo %>%
 
 # compute mean reward rate
 mean(df_zozo$click)
-
-# turn user features into dummies
-# df_zozo <- dummy_cols(df_zozo, select_columns = c("user_feature_0", "user_feature_1",
-#                        "user_feature_2", "user_feature_3"), remove_first_dummy = TRUE)
 
 #############################
 ## Thompson Sampling
@@ -372,35 +373,82 @@ legend("topright",
     cex = 0.8
 )
 
-## train the bandit with subgroups
+#############################
+## Aggregation vs. heterogeneity sensitivity analysis
+#############################
 
-# read the vanilla UCB results
+# clustering analysis based on user features
+# k-means clustering
+# we use the elbow method to determine the number of clusters
+set.seed(123)
+wss <- vector("numeric", 10)
+alpha <- 0.2
+
+cluster_columns <- c("user_feature_0_2", "user_feature_0_3", "user_feature_0_4",
+    "user_feature_1_2", "user_feature_1_3", "user_feature_1_4", "user_feature_1_5",
+    "user_feature_1_6", "user_feature_2_2", "user_feature_2_3", "user_feature_2_4",
+    "user_feature_2_5", "user_feature_2_6", "user_feature_2_7", "user_feature_2_8",
+    "user_feature_2_9", "user_feature_2_10", "user_feature_3_2", "user_feature_3_3",
+    "user_feature_3_4", "user_feature_3_5", "user_feature_3_6", "user_feature_3_7",
+    "user_feature_3_8", "user_feature_3_9", "user_feature_3_10")
+
+# loop over the number of clusters
+for (i in 1:10) {
+    kmeans_model <- kmeans(df_zozo[, cluster_columns], centers = i)
+    wss[i] <- sum(kmeans_model$withinss)
+}
+
+# plot the within-cluster sum of squares against the number of clusters and save the plot with high resolutio
+png("elbow_method.png", width = 1000, height = 800)
+plot(1:10, wss, type = "b", pch = 6, frame = TRUE, xlab = "Number of clusters",
+    ylab = "Within-cluster sum of squares", cex.lab = 2, cex.axis = 1, cex.main = 1.5)
+dev.off()
+
+
+size_sim <- 500000
+n_sim <- 10
+
+# read df_UCB_vanilla
 df_UCB_vanilla <- read.csv("df_UCB_vanilla_max.csv")
 
-# compute the reward rate of each arm
-df_UCB_vanilla %>%
-    group_by(choice) %>%
-    summarise(reward_rate = mean(reward)) %>%
-    arrange(desc(reward_rate))
+# use two clusters 
+kmeans_model <- kmeans(df_zozo[, cluster_columns], centers = 2)
 
-# seperate df_zozo into two groups by user_feature_1
+df_zozo$cluster <- kmeans_model$cluster
+
 df_zozo_1 <- df_zozo %>%
-    filter(user_feature_1 <= 3)
+    filter(cluster == 1)
 
 df_zozo_2 <- df_zozo %>%
-    filter(user_feature_1 > 3)
+    filter(cluster == 2)
 
-# train the bandit with the two subgroups
+# descriptive analysis of the click-through rate of the two subgroups
+df_zozo_1 %>%
+    summarise(obs = n(),
+        click_rate = mean(click),
+        sd_click = sd(click))
+
+df_zozo_2 %>%
+    summarise(obs = n(),
+        click_rate = mean(click),
+        sd_click = sd(click))
+
+df_zozo %>%
+    summarise(click_rate = mean(click))
+
+# t test to compare the click-through rate of the two subgroups
+t.test(df_zozo_1$click, df_zozo_2$click)
+
+# train vanilla UCB on each subgroup
+
 bandit_UCB_vanilla_1 <- OfflineReplayEvaluatorBandit$new(click ~ item_id, df_zozo_1)
 
 bandit_UCB_vanilla_2 <- OfflineReplayEvaluatorBandit$new(click ~ item_id, df_zozo_2)
 
-# initialize the policy
 policy_UCB_vanilla_1 <- LinUCBDisjointOptimizedPolicy$new(alpha = alpha)
 
 policy_UCB_vanilla_2 <- LinUCBDisjointOptimizedPolicy$new(alpha = alpha)
 
-# create an agent to make arm choice based on the policy
 agent_UCB_vanilla_1 <- Agent$new(
     policy_UCB_vanilla_1, # add policy
     bandit_UCB_vanilla_1
@@ -411,75 +459,81 @@ agent_UCB_vanilla_2 <- Agent$new(
     bandit_UCB_vanilla_2
 ) # add bandit
 
-n_sim <- 100000
-
-# initialize the simulator
 sim_UCB_vanilla_1 <- Simulator$new(agent_UCB_vanilla_1, # set our agent
-    horizon = 100000, # set size of sim
+    horizon = size_sim, # set size of sim
     do_parallel = TRUE, # run in parallel
     worker_max = 5, # set the number of workers
-    simulations = 10
-) # simulate it n_sim times
+    simulations = n_sim
+) # simulate it n_sim 
 
 sim_UCB_vanilla_2 <- Simulator$new(agent_UCB_vanilla_2, # set our agent
-    horizon = 100000, # set size of sim
+    horizon = size_sim, # set size of sim
     do_parallel = TRUE, # run in parallel
     worker_max = 5, # set the number of workers
-    simulations = 10
+    simulations = n_sim
 ) # simulate it n_sim times
 
-# run the simulation
-history_UCB_vanilla_1 <- sim_UCB_vanilla_1$run()
+history_UCB_vanilla_1outof2 <- sim_UCB_vanilla_1$run()
 
-history_UCB_vanilla_2 <- sim_UCB_vanilla_2$run()
+history_UCB_vanilla_2outof2 <- sim_UCB_vanilla_2$run()
+
+# save rdata
+save(history_UCB_vanilla_1outof2, file = "history_UCB_vanilla_1outof2.RData")
+save(history_UCB_vanilla_2outof2, file = "history_UCB_vanilla_2outof2.RData")
+
+# read the results
+load("history_UCB_vanilla_1outof2.RData")
+load("history_UCB_vanilla_2outof2.RData")
 
 # gather results
-df_UCB_vanilla_1 <- history_UCB_vanilla_1$data %>%
+df_UCB_vanilla_1outof2 <- history_UCB_vanilla_1outof2$data %>%
     select(t, sim, choice, reward, agent)
 
-df_UCB_vanilla_2 <- history_UCB_vanilla_2$data %>%
-    select(t, sim, choice, reward, agent)
+df_UCB_vanilla_2outof2 <- history_UCB_vanilla_2outof2$data %>%
+    select(t, sim, choice, reward, agent)  
 
-df_UCB_vanilla_1_agg <- cum_reward(df_UCB_vanilla_1)
+df_UCB_vanilla_1outof2_agg <- cum_reward(df_UCB_vanilla_1outof2)
 
-df_UCB_vanilla_2_agg <- cum_reward(df_UCB_vanilla_2)
+df_UCB_vanilla_2outof2_agg <- cum_reward(df_UCB_vanilla_2outof2)
 
 # plot the two results and df_UCB_vanilla_agg in the same plot
 plot <- ggplot() +
-    geom_line(data = df_UCB_vanilla_1_agg, aes(x = t, y = mean_cum_reward, color = "subgroup1")) +
-    #geom_ribbon(data = df_UCB_vanilla_1_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "orange", alpha = 0.1) +
-    geom_line(data = df_UCB_vanilla_2_agg, aes(x = t, y = mean_cum_reward, color = "subgroup2")) +
-    #geom_ribbon(data = df_UCB_vanilla_2_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "blue", alpha = 0.1) +
+    geom_line(data = df_UCB_vanilla_1outof2_agg, aes(x = t, y = mean_cum_reward, color = "subgroup1")) +
+    geom_ribbon(data = df_UCB_vanilla_1outof2_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "orange", alpha = 0.1) +
+    geom_line(data = df_UCB_vanilla_2outof2_agg, aes(x = t, y = mean_cum_reward, color = "subgroup2")) +
+    geom_ribbon(data = df_UCB_vanilla_2outof2_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "blue", alpha = 0.1) +
     geom_line(data = df_UCB_vanilla_agg, aes(x = t, y = mean_cum_reward, color = "all individuals")) +
-    #geom_ribbon(data = df_UCB_vanilla_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "darkolivegreen4", alpha = 0.1) +
+    geom_ribbon(data = df_UCB_vanilla_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "darkolivegreen4", alpha = 0.1) +
     scale_color_manual(values = c("subgroup1" = "orange", "subgroup2" = "blue", "all individuals" = "darkolivegreen4")) +
-    xlim(0, length(df_UCB_vanilla_1_agg$t)) +
-    ylim(0, 5) +
     labs(x = "Rounds", y = "Cumulative Reward") +
+    xlim(0, length(df_UCB_vanilla_1outof2_agg$t)) +
+    ylim(0, 30) +
     theme_bw() + # set the theme
     theme(text = element_text(size = 18))
 
 # save the plot
-ggsave("reward_subgroups.png", plot, width = 10, height = 8)
+ggsave("reward_subgroups_1outof2.png", plot, width = 10, height = 8)
 
 # check the best arms for the two subgroups
-df_UCB_vanilla_1 %>%
+df_UCB_vanilla_1outof2 %>%
+    group_by(choice) %>%
+    summarise(reward_rate = mean(reward),
+    se_reward = sd(reward)/sqrt(length(reward))) %>%
+    arrange(desc(reward_rate)) %>%
+    filter(choice == 60)
+
+df_UCB_vanilla_2outof2 %>%
     group_by(choice) %>%
     summarise(reward_rate = mean(reward),
     se_reward = sd(reward)/sqrt(length(reward))) %>%
     arrange(desc(reward_rate))
 
-df_UCB_vanilla_2 %>%
+df_UCB_vanilla %>% 
     group_by(choice) %>%
     summarise(reward_rate = mean(reward),
     se_reward = sd(reward)/sqrt(length(reward))) %>%
     arrange(desc(reward_rate))
 
-df_UCB_vanilla %>%
-    group_by(choice) %>%
-    summarise(reward_rate = mean(reward),
-    se_reward = sd(reward)/sqrt(length(reward))) %>%
-    arrange(desc(reward_rate))
 
 #############################
 ## Fairness Analysis
@@ -504,6 +558,47 @@ exposure_UCB <- df_UCB_vanilla %>%
     group_by(choice) %>%
     summarise(n_exposures = n()/length(unique(sim)))
 
+# take per 800 rounds as a window, compute the number of exposures for each item in each window
+
+df_random <- df_random %>%
+    mutate(window = t %/% 800)
+
+df_UCB_vanilla <- df_UCB_vanilla %>%
+    mutate(window = t %/% 800)
+
+exposure_random <- df_random %>%
+    group_by(choice, window) %>%
+    summarise(n_exposures = n()/length(unique(sim))) %>%
+    group_by(window) %>%
+    summarise(max = max(n_exposures),
+    min = min(n_exposures))
+
+exposure_UCB <- df_UCB_vanilla %>%
+    group_by(choice, window) %>%
+    summarise(n_exposures = n()/length(unique(sim))) %>%
+    group_by(window) %>%
+    summarise(max = max(n_exposures),
+    min = min(n_exposures))
+
+# plot the quantiles for the two policies in the same plot, and save the plot
+plot1 <- ggplot() +
+    geom_line(data = exposure_random, aes(x = window, y = min, color = "Random"), size = 1) +
+    geom_point(data = exposure_random, aes(x = window, y = min, color = "Random"), size = 2) +
+    geom_line(data = exposure_random, aes(x = window, y = max, color = "Random"), size = 1) +
+    geom_point(data = exposure_random, aes(x = window, y = max, color = "Random"), size = 2) +
+    geom_line(data = exposure_UCB, aes(x = window, y = min, color = "UCB"), size = 1) +
+    geom_point(data = exposure_UCB, aes(x = window, y = min, color = "UCB"), size = 2) +
+    geom_line(data = exposure_UCB, aes(x = window, y = max, color = "UCB"), size = 1) +
+    geom_point(data = exposure_UCB, aes(x = window, y = max, color = "UCB"), size = 2) +
+    scale_color_manual(values = c("Random" = "lightblue", "UCB" = "salmon")) +
+    labs(x = "Window", y = "Number of exposures") +
+    theme_bw() + # set the theme
+    theme(text = element_text(size = 16)) +
+    xlim(0, 15)
+
+# save the plot
+ggsave("exposures_range.png", plot1, width = 10, height = 8)
+
 # plot the number of exposures for each item for the two policies in the same plot, and save the plot
 plot1 <- ggplot() +
     geom_point(data = exposure_random, aes(x = choice, y = n_exposures, color = "Random"), size = 2) +
@@ -512,7 +607,7 @@ plot1 <- ggplot() +
     scale_color_manual(values = c("Random" = "lightblue", "UCB" = "salmon")) +
     theme_bw() + # set the theme
     theme(text = element_text(size = 16)) +
-    labs(title = "Throughout the rounds")
+    labs(title = "All rounds")
 
 # do the same analysis with only the first 1000 rounds
 
@@ -592,6 +687,9 @@ history_UCB_vanilla <- sim_UCB_vanilla$run()
 
 # save history_UCB_vanilla to R data
 save(history_UCB_vanilla, file = "history_UCB_vanilla.RData")
+
+# read history_UCB_vanilla
+load("history_UCB_vanilla.RData")
 
 # gather results
 df_UCB_vanilla <- history_UCB_vanilla$data
