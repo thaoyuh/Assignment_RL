@@ -85,14 +85,14 @@ for (var in contexts) {
   
   # Here we plot the mean click rate and number of observations per level of context.
   p <- ggplot(reward_rates[[var]], aes_string(x = var)) +
-    geom_line(aes(y = mean, color = "Mean clicks")) +
+    geom_line(aes(y = mean, color = "Mean click rate")) +
     geom_line(aes(y = count/1e8, color = "Number of observations"), linetype = "dashed") +
-    scale_y_continuous(name = "Mean clicks",
+    scale_y_continuous(name = "Mean click rate",
                        limits = c(0, 0.0075),
                        sec.axis = sec_axis(~. * 1e8, name = "Number of observations", 
                                            labels = function(x) format(x, scientific = FALSE, big.mark = ","))) +
     scale_x_continuous(labels = function(x) format(x, scientific = FALSE)) +
-    labs(y = "Mean Clicks", color = NULL) +
+    labs(y = "Mean click rate", color = NULL) +
     theme_minimal() +
     theme(legend.position = "top")
   
