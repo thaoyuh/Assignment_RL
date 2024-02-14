@@ -8,8 +8,10 @@ pacman::p_load(
     tidyverse, rlist, contextual,
     lubridate, zoo, roll,
     fastDummies, gridExtra,
-    stats
+    stats, data.table, formula.tools
 )
+
+setwd(dirname(rstudioapi::getSourceEditorContext()$path))
 
 # get the dataframe from the csv file
 df_zozo <- read.csv("zozo_Context_80items.csv")
@@ -262,11 +264,12 @@ cluster_columns <- c("user_feature_0_2", "user_feature_0_3", "user_feature_0_4",
                      "user_feature_3_4", "user_feature_3_5", "user_feature_3_6", "user_feature_3_7",
                      "user_feature_3_8", "user_feature_3_9", "user_feature_3_10")
 
-cluster_data <- list()
-for (i in c(2,4)) {
-  # Clustering on the k=2 and k=4 levels.
-  df_zozo[paste0("kmeans_", i, "_clusters")] <- kmeans(df_zozo[, cluster_columns], centers = i)$cluster
-}
+
+df_zozo <- as.data.frame(df_zozo)   # How has this not been done earlier? Not moved it up yet because testing requires reloading. 
+
+df_zozo["kmeans_2_clusters"] <- kmeans(dff_zozo[, cluster_columns], centers = 2)$cluster
+df_zozo["kmeans_4_clusters"] <- kmeans(df_zozo[, cluster_columns], centers = 4)$cluster
+
 # One-hot encoding the 4 level dummies.
 df_zozo <- dummy_cols(df_zozo, select_columns = c("kmeans_4_clusters"), remove_first_dummy = TRUE)
 
@@ -275,57 +278,70 @@ df_zozo <- dummy_cols(df_zozo, select_columns = c("kmeans_4_clusters"), remove_f
 # Contextual Thompson Sampling
 
 
-# Initializing bandits
+# Initializing bandits. Clunky because of stupid R and stupid environment variable bandit.
 bandit_TS_contextual_k2 <- OfflineReplayEvaluatorBandit$new(click ~ item_id | hour_dec + kmeans_2_clusters, df_zozo)
 bandit_TS_contextual_k4 <- OfflineReplayEvaluatorBandit$new(click ~ item_id | hour_dec + kmeans_4_clusters_2 + kmeans_4_clusters_3 + kmeans_4_clusters_4, df_zozo)
-bandit_TS_contextual <- c(bandit_TS_contextual_k2, bandit_TS_contextual_k4)
 
-df_TS_contextual_agg <- list()
-for (bandit in bandit_TS_contextual){
+df_TS_contextual_agg <- list()    # Initializing list to store cumulative rewards.
+
+for (k in c(2,4)){ # Clunky because of stupid R and stupid environment variable bandit.
   
   # Initializing policy
   policy_TS_contextual <- ContextualLinTSPolicy$new()
   
-  # create an agent to make arm choice based on the policy
+  # Create an agent to make arm choice based on the policy
   agent_TS_contextual <- Agent$new(
-    policy_TS_contextual, # add policy
-    bandit
-  ) # add bandit
+    policy_TS_contextual, # Adding policy
+    # Adding bandit. Clunky because of stupid R and stupid environment variable bandit.
+    if (k == 2){bandit_TS_contextual_k2} else{bandit_TS_contextual_k4}
+  ) 
   
-  # initialize the simulator
+  # Running the simulation. Simulating n_sim times
   sim_TS_contextual <- Simulator$new(agent_TS_contextual, # set our agent
                                      horizon = size_sim, # set size of sim
                                      do_parallel = TRUE, # run in parallel
                                      worker_max = 5, # set the number of workers
                                      simulations = n_sim
-  ) # simulate it n_sim times
-  
-  # run the simulation
+  )
   history_TS_contextual <- sim_TS_contextual$run()
   
-  # gather results
+  # Gathering results.
   df_TS_contextual <- history_TS_contextual$data %>%
     select(t, sim, choice, reward, agent)
-  # save the results
-  write.csv(df_TS_contextual, paste0("df_TS_contextual_max_", bandit, ".csv"))
   
-  df_TS_contextual_agg[as.character(bandit)] <- cum_reward(df_TS_contextual)
+  # Saving the results. Clunky because of stupid R and stupid environment variable bandit.
+  if (k == 2){
+    write.csv(df_TS_contextual, paste0("df_TS_contextual_max_kmeans_2_clusters.csv"))
+    df_TS_contextual_agg["kmeans_2_clusters"] <- list(cum_reward(df_TS_contextual))
+  } else {
+    write.csv(df_TS_contextual, paste0("df_TS_contextual_max_kmeans_4_clusters.csv"))
+    df_TS_contextual_agg["kmeans_4_clusters"] <- list(cum_reward(df_TS_contextual))
+  }
   
   summary(history_TS_contextual)
 }
 
 
-
-# plot df_TS_vanilla_agg and df_TS_contextual_agg in the same plot
-ggplot(df_TS_vanilla_agg, aes(x = t, y = mean_cum_reward)) +
+# Plotting the cumulative rewards of all three Thompson Sampling algorithms:
+# Vanilla, k2, and k4.
+p <- ggplot(df_TS_vanilla_agg, aes(x = t, y = mean_cum_reward)) +
   geom_line(aes(y = mean_cum_reward), color = "orange") +
   geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci), fill = "orange", alpha = 0.1) +
-  geom_line(data = df_TS_contextual_agg, aes(x = t, y = mean_cum_reward), color = "blue") +
-  geom_ribbon(data = df_TS_contextual_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "blue", alpha = 0.1) +
-  scale_color_manual(values = c("orange", "blue")) +
+  geom_line(data = df_TS_contextual_agg["kmeans_2_clusters"], aes(x = t, y = mean_cum_reward), color = "blue") +
+  geom_ribbon(data = df_TS_contextual_agg["kmeans_2_clusters"], aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "blue", alpha = 0.1) +
+  geom_line(data = df_TS_contextual_agg["kmeans_4_clusters"], aes(x = t, y = mean_cum_reward), color = "green") +
+  geom_ribbon(data = df_TS_contextual_agg["kmeans_4_clusters"], aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "green", alpha = 0.1) +
+  scale_color_manual(name = "Algorithm", values = c("Vanilla" = "orange", 
+                                                    "Peak hours + two user feature clusters" = "blue", 
+                                                    "Peak hours + four user feature clusters" = "green")) +
   labs(x = "Rounds", y = "Cumulative Reward") +
-  theme_bw() + # set the theme
-  theme(text = element_text(size = 18))
+  theme_minimal() +
+  theme(text = element_text(size = 18), legend.position = "top")
+
+
+ggsave(filename = "TS_contextual_clusters_cumrewards.pdf", plot = p)
+print(p)
+
 
 
 
@@ -334,47 +350,75 @@ ggplot(df_TS_vanilla_agg, aes(x = t, y = mean_cum_reward)) +
 
 ######################################
 # Contextual UCB
-bandit_UCB_contextual <- OfflineReplayEvaluatorBandit$new(click ~ item_id | position_2 + position_3, df_zozo)
 
-# initialize the policy
-policy_UCB_contextual <- LinUCBDisjointOptimizedPolicy$new(alpha = alpha)
+bandit_UCB_contextual_k2 <- OfflineReplayEvaluatorBandit$new(click ~ item_id | hour_dec + kmeans_2_clusters, df_zozo)
+bandit_UCB_contextual_k4 <- OfflineReplayEvaluatorBandit$new(click ~ item_id | hour_dec + kmeans_4_clusters_2 + kmeans_4_clusters_3 + kmeans_4_clusters_4, df_zozo)
 
-# create an agent to make arm choice based on the policy
-agent_UCB_contextual <- Agent$new(
-    policy_UCB_contextual, # add policy
-    bandit_UCB_contextual
-) # add bandit
-
-# initialize the simulator
-sim_UCB_contextual <- Simulator$new(agent_UCB_contextual, # set our agent
-    horizon = size_sim, # set size of sim
-    do_parallel = TRUE, # run in parallel
-    worker_max = 5, # set the number of workers
-    simulations = n_sim
-) # simulate it n_sim times
-
-# run the simulation
-history_UCB_contextual <- sim_UCB_contextual$run()
-
-# gather results
-df_UCB_contextual <- history_UCB_contextual$data %>%
+df_UCB_contextual_agg <- list()    # Initializing list to store cumulative rewards.
+for (k in c(2,4)){ # Clunky because of stupid R and stupid environment variable bandit.
+  
+  # Initializing policy
+  policy_UCB_contextual <- LinUCBDisjointOptimizedPolicy$new(alpha = alpha)
+  
+  # Create an agent to make arm choice based on the policy
+  agent_UCB_contextual <- Agent$new(
+    policy_UCB_contextual, # Adding policy
+    # Adding bandit. Clunky because of stupid R and stupid environment variable bandit.
+    if (k == 2){bandit_UCB_contextual_k2} else{bandit_UCB_contextual_k4}
+  ) 
+  
+  # Running the simulation. Simulating n_sim times
+  sim_UCB_contextual <- Simulator$new(agent_UCB_contextual, # set our agent
+                                     horizon = size_sim, # set size of sim
+                                     do_parallel = TRUE, # run in parallel
+                                     worker_max = 5, # set the number of workers
+                                     simulations = n_sim
+  )
+  history_UCB_contextual <- sim_UCB_contextual$run()
+  
+  # Gathering results.
+  df_UCB_contextual <- history_UCB_contextual$data %>%
     select(t, sim, choice, reward, agent)
+  
+  # Saving the results. Clunky because of stupid R and stupid environment variable bandit.
+  if (k == 2){
+    write.csv(df_UCB_contextual, paste0("df_UCB_contextual_max_kmeans_2_clusters.csv"))
+    df_UCB_contextual_agg["kmeans_2_clusters"] <- list(cum_reward(df_UCB_contextual))
+  } else {
+    write.csv(df_UCB_contextual, paste0("df_UCB_contextual_max_kmeans_4_clusters.csv"))
+    df_UCB_contextual_agg["kmeans_4_clusters"] <- list(cum_reward(df_UCB_contextual))
+  }
+  
+  summary(history_UCB_contextual)
+}
 
-df_UCB_contextual_agg <- cum_reward(df_UCB_contextual)
 
-# save the results
-write.csv(df_UCB_contextual, "df_UCB_contextual_max.csv")
+# Plotting the cumulative rewards of all three Thompson Sampling algorithms:
+# Vanilla, k2, and k4.
+p <- ggplot(df_UCB_vanilla_agg, aes(x = t, y = mean_cum_reward)) +
+  geom_line(aes(y = mean_cum_reward), color = "orange") +
+  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci), fill = "orange", alpha = 0.1) +
+  geom_line(data = df_UCB_contextual_agg["kmeans_2_clusters"], aes(x = t, y = mean_cum_reward), color = "blue") +
+  geom_ribbon(data = df_UCB_contextual_agg["kmeans_2_clusters"], aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "blue", alpha = 0.1) +
+  geom_line(data = df_UCB_contextual_agg["kmeans_4_clusters"], aes(x = t, y = mean_cum_reward), color = "green") +
+  geom_ribbon(data = df_UCB_contextual_agg["kmeans_4_clusters"], aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "green", alpha = 0.1) +
+  scale_color_manual(name = "Algorithm", values = c("Vanilla" = "orange", 
+                                                    "Peak hours + two user feature clusters" = "blue", 
+                                                    "Peak hours + four user feature clusters" = "green")) +
+  labs(x = "Rounds", y = "Cumulative Reward") +
+  theme_minimal() +
+  theme(text = element_text(size = 18), legend.position = "top")
 
-# plot df_UCB_vanilla_agg and df_UCB_contextual_agg in the same plot
-ggplot(df_UCB_vanilla_agg, aes(x = t, y = mean_cum_reward)) +
-    geom_line(aes(y = mean_cum_reward), color = "orange") +
-    geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci), fill = "yellow", alpha = 0.1) +
-    geom_line(data = df_UCB_contextual_agg, aes(x = t, y = mean_cum_reward), color = "blue") +
-    geom_ribbon(data = df_UCB_contextual_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "grey", alpha = 0.1) +
-    scale_color_manual(values = c("orange", "blue")) +
-    labs(x = "Rounds", y = "Cumulative Reward") +
-    theme_bw() + # set the theme
-    theme(text = element_text(size = 18))
+
+ggsave(filename = "UCB_contextual_clusters_cumrewards.pdf", plot = p)
+print(p)
+
+
+
+########################################################## Above should be done.
+## !!!!!!!!!!!!!!!!! WORK IN PROGRESS !!!!!!!!!!!!!!!!! ##  
+########################################################## Below is in progress.
+
 
 # run a random policy to compare the results
 bandit_random <- OfflineReplayEvaluatorBandit$new(click ~ item_id, df_zozo)
