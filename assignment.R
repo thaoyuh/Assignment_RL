@@ -62,6 +62,17 @@ df_zozo$day  <- day(df_zozo$timestamp)
 df_zozo$hour <- hour(df_zozo$timestamp)
 
 
+# Create an indicator variable for the "decision hours"
+# Which are defined as 18h and 19h, when there is a clear peak in click rates.
+# As seen from the plots made below.
+df_zozo$hour_dec <- ifelse(df_zozo$hour == 18 | df_zozo$hour == 19, 1, 0)
+
+# Only 1.7% of purchases are made in these decision hours.
+mean(df_zozo$hour_dec)
+
+
+
+
 
 #################################
 ## Click rates per level of context.
@@ -143,11 +154,10 @@ for (var in c("total", contexts)) {
 }
 
 
-# compute mean reward rate
-# mean(df_zozo$click)
+
 
 #############################
-## Thompson Sampling
+## Vanilla Thompson Sampling
 #############################
 
 # Vanilla Thompson Sampling
@@ -193,59 +203,11 @@ df_TS_vanilla_agg <- cum_reward(df_TS_vanilla)
 # save the results
 write.csv(df_TS_vanilla, "df_TS_vanilla_max.csv")
 
-# Contextual Thompson Sampling
 
-# initialize the bandit
-
-bandit_TS_contextual <- OfflineReplayEvaluatorBandit$new(click ~ item_id | position_2 + position_3, df_zozo)
-
-# initialize the policy
-policy_TS_contextual <- ContextualLinTSPolicy$new()
-
-# create an agent to make arm choice based on the policy
-agent_TS_contextual <- Agent$new(
-    policy_TS_contextual, # add policy
-    bandit_TS_contextual
-) # add bandit
-
-# initialize the simulator
-sim_TS_contextual <- Simulator$new(agent_TS_contextual, # set our agent
-    horizon = size_sim, # set size of sim
-    do_parallel = TRUE, # run in parallel
-    worker_max = 5, # set the number of workers
-    simulations = n_sim
-) # simulate it n_sim times
-
-# run the simulation
-history_TS_contextual <- sim_TS_contextual$run()
-
-# gather results
-df_TS_contextual <- history_TS_contextual$data %>%
-    select(t, sim, choice, reward, agent)
-
-df_TS_contextual_agg <- cum_reward(df_TS_contextual)
-
-summary(history_TS_contextual)
-
-# plot df_TS_vanilla_agg and df_TS_contextual_agg in the same plot
-ggplot(df_TS_vanilla_agg, aes(x = t, y = mean_cum_reward)) +
-    geom_line(aes(y = mean_cum_reward), color = "orange") +
-    geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci), fill = "orange", alpha = 0.1) +
-    geom_line(data = df_TS_contextual_agg, aes(x = t, y = mean_cum_reward), color = "blue") +
-    geom_ribbon(data = df_TS_contextual_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "blue", alpha = 0.1) +
-    scale_color_manual(values = c("orange", "blue")) +
-    labs(x = "Rounds", y = "Cumulative Reward") +
-    theme_bw() + # set the theme
-    theme(text = element_text(size = 18))
-
-# save the results
-write.csv(df_TS_contextual, "df_TS_contextual_max.csv")
 
 #############################
-## UCB
+## Vanilla UCB
 #############################
-
-# Vanilla UCB
 bandit_UCB_vanilla <- OfflineReplayEvaluatorBandit$new(click ~ item_id, df_zozo)
 
 # initialize the policy
@@ -281,6 +243,96 @@ df_UCB_vanilla_agg <- cum_reward(df_UCB_vanilla)
 # save the results
 write.csv(df_UCB_vanilla, "df_UCB_vanilla_max.csv")
 
+
+
+
+######################################
+## Contextual analysis
+######################################
+
+
+
+## Clustering on user features. 
+
+cluster_columns <- c("user_feature_0_2", "user_feature_0_3", "user_feature_0_4",
+                     "user_feature_1_2", "user_feature_1_3", "user_feature_1_4", "user_feature_1_5",
+                     "user_feature_1_6", "user_feature_2_2", "user_feature_2_3", "user_feature_2_4",
+                     "user_feature_2_5", "user_feature_2_6", "user_feature_2_7", "user_feature_2_8",
+                     "user_feature_2_9", "user_feature_2_10", "user_feature_3_2", "user_feature_3_3",
+                     "user_feature_3_4", "user_feature_3_5", "user_feature_3_6", "user_feature_3_7",
+                     "user_feature_3_8", "user_feature_3_9", "user_feature_3_10")
+
+cluster_data <- list()
+for (i in c(2,4)) {
+  # Clustering on the k=2 and k=4 levels.
+  df_zozo[paste0("kmeans_", i, "_clusters")] <- kmeans(df_zozo[, cluster_columns], centers = i)$cluster
+}
+# One-hot encoding the 4 level dummies.
+df_zozo <- dummy_cols(df_zozo, select_columns = c("kmeans_4_clusters"), remove_first_dummy = TRUE)
+
+
+######################################
+# Contextual Thompson Sampling
+
+
+# Initializing bandits
+bandit_TS_contextual_k2 <- OfflineReplayEvaluatorBandit$new(click ~ item_id | hour_dec + kmeans_2_clusters, df_zozo)
+bandit_TS_contextual_k4 <- OfflineReplayEvaluatorBandit$new(click ~ item_id | hour_dec + kmeans_4_clusters_2 + kmeans_4_clusters_3 + kmeans_4_clusters_4, df_zozo)
+bandit_TS_contextual <- c(bandit_TS_contextual_k2, bandit_TS_contextual_k4)
+
+df_TS_contextual_agg <- list()
+for (bandit in bandit_TS_contextual){
+  
+  # Initializing policy
+  policy_TS_contextual <- ContextualLinTSPolicy$new()
+  
+  # create an agent to make arm choice based on the policy
+  agent_TS_contextual <- Agent$new(
+    policy_TS_contextual, # add policy
+    bandit
+  ) # add bandit
+  
+  # initialize the simulator
+  sim_TS_contextual <- Simulator$new(agent_TS_contextual, # set our agent
+                                     horizon = size_sim, # set size of sim
+                                     do_parallel = TRUE, # run in parallel
+                                     worker_max = 5, # set the number of workers
+                                     simulations = n_sim
+  ) # simulate it n_sim times
+  
+  # run the simulation
+  history_TS_contextual <- sim_TS_contextual$run()
+  
+  # gather results
+  df_TS_contextual <- history_TS_contextual$data %>%
+    select(t, sim, choice, reward, agent)
+  # save the results
+  write.csv(df_TS_contextual, paste0("df_TS_contextual_max_", bandit, ".csv"))
+  
+  df_TS_contextual_agg[as.character(bandit)] <- cum_reward(df_TS_contextual)
+  
+  summary(history_TS_contextual)
+}
+
+
+
+# plot df_TS_vanilla_agg and df_TS_contextual_agg in the same plot
+ggplot(df_TS_vanilla_agg, aes(x = t, y = mean_cum_reward)) +
+  geom_line(aes(y = mean_cum_reward), color = "orange") +
+  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci), fill = "orange", alpha = 0.1) +
+  geom_line(data = df_TS_contextual_agg, aes(x = t, y = mean_cum_reward), color = "blue") +
+  geom_ribbon(data = df_TS_contextual_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "blue", alpha = 0.1) +
+  scale_color_manual(values = c("orange", "blue")) +
+  labs(x = "Rounds", y = "Cumulative Reward") +
+  theme_bw() + # set the theme
+  theme(text = element_text(size = 18))
+
+
+
+
+
+
+######################################
 # Contextual UCB
 bandit_UCB_contextual <- OfflineReplayEvaluatorBandit$new(click ~ item_id | position_2 + position_3, df_zozo)
 
@@ -481,7 +533,7 @@ for (i in 1:10) {
     wss[i] <- sum(kmeans_model$withinss)
 }
 
-# plot the within-cluster sum of squares against the number of clusters and save the plot with high resolutio
+# plot the within-cluster sum of squares against the number of clusters and save the plot with high resolution
 png("elbow_method.png", width = 1000, height = 800)
 plot(1:10, wss, type = "b", pch = 6, frame = TRUE, xlab = "Number of clusters",
     ylab = "Within-cluster sum of squares", cex.lab = 2, cex.axis = 1, cex.main = 1.5)
