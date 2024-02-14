@@ -49,16 +49,112 @@ df_zozo$user_feature_3 <- as.numeric(df_zozo$user_feature_3)
 df_zozo <- dummy_cols(df_zozo, select_columns = c("user_feature_0", "user_feature_1",
                        "user_feature_2", "user_feature_3"), remove_first_dummy = TRUE)
 
-# check the number of repeats for each item
+# check the number of occurrences for each item
 df_zozo %>%
     group_by(item_id) %>%
     summarise(n = n()) %>%
     arrange(desc(n))
 
-# compute the reward rate for each item
-df_zozo %>%
-    group_by(item_id) %>%
-    summarise(reward_rate = mean(click))
+
+
+# Create the variables for hour and day of observation
+df_zozo$day  <- day(df_zozo$timestamp)
+df_zozo$hour <- hour(df_zozo$timestamp)
+
+
+
+#################################
+## Click rates per level of context.
+
+# Computing the mean clicks per level of each context variable.
+# I want to plot these means together with the number of observations in a 
+# single plot for each context. So each plot contains two lines: they share the 
+# x-axis denoting levels of the context variable, and they have separate y-axes
+# for number of observations and mean clicks.
+
+contexts <- c("position", "user_feature_0", "user_feature_1", "user_feature_2", "user_feature_3", "day", "hour")
+
+# Next, we compute the click rate per item for each level of the categorical contexts.
+# Here we also count the number of observations for each level.
+reward_rates <- list()
+for (var in contexts) {
+  reward_rates[[var]] <- aggregate(df_zozo[["click"]], by = list(df_zozo[[var]]),  function(x) c(mean = mean(x), count = length(x)))
+  reward_rates[[var]] <- cbind(reward_rates[[var]][["Group.1"]], reward_rates[[var]][["x"]])
+  colnames(reward_rates[[var]]) <- c(var, "mean", "count")
+  reward_rates[[var]] <- as.data.frame(reward_rates[[var]])
+  
+  # Here we plot the mean click rate and number of observations per level of context.
+  p <- ggplot(reward_rates[[var]], aes_string(x = var)) +
+    geom_line(aes(y = mean, color = "Mean clicks")) +
+    geom_line(aes(y = count/1e8, color = "Number of observations"), linetype = "dashed") +
+    scale_y_continuous(name = "Mean clicks",
+                       limits = c(0, 0.0075),
+                       sec.axis = sec_axis(~. * 1e8, name = "Number of observations", 
+                                           labels = function(x) format(x, scientific = FALSE, big.mark = ","))) +
+    scale_x_continuous(labels = function(x) format(x, scientific = FALSE)) +
+    labs(y = "Mean Clicks", color = NULL) +
+    theme_minimal() +
+    theme(legend.position = "top")
+  
+  ggsave(filename = paste0("mean_clicks_", var, ".pdf"), plot = p)
+}
+
+
+
+
+
+#################################
+## Reward rates per item per level of context.
+
+# I find that these plots are actually not very informative, as there are no 
+# clear distinctions between most distributions save a few. 
+# Although actually this can be considered informative, but simply indicative of 
+# relative homogeneity.
+
+
+# Compute the reward rate for each item. Both on an aggregate level and per 
+# level of each context variable
+
+
+reward_rates <- list()
+# First we compute the overall click rate for each item.
+reward_rates[["total"]] <- aggregate(df_zozo[["click"]], by = list(df_zozo[["item_id"]]), mean)
+colnames(reward_rates[["total"]]) <- c("item_id", "mean_click")
+
+# Next, we compute the click rate per item for each level of the categorical contexts.
+for (var in contexts) {
+  reward_rates[[var]] <- aggregate(df_zozo[["click"]], by = list(df_zozo[["item_id"]], df_zozo[[var]]),  mean)
+  colnames(reward_rates[[var]]) <- c("mean_clicks_per_item_", var, )
+}
+
+# Plotting the histogram of the click rates per item on the aggregate level.
+p <- ggplot(reward_rates[["total"]], aes(x = mean_click)) +
+  geom_histogram(bins = 30, position = "identity", alpha = 0.5, fill = "darkblue") +
+  geom_vline(xintercept = mean(df_zozo$click), color = "red", linetype = "dashed", size = 0.8) +
+  labs(x = "Click Through Rate", y = "Frequency") +
+  theme_minimal() +
+  theme(legend.position = "top") 
+
+ggsave(filename = paste0("mean_clicks_per_item_aaa_total", ".pdf"), plot = p)
+print(p)
+
+
+# Plotting the histogram of the click rates per item on the context levels.
+# Setting colors manually to get clearer distinctions.
+colors <- c("red", "blue", "darkgreen", "#FFD700", "#FF5733", "magenta", "cyan","seagreen", "pink", "#337CFF", "purple")
+
+for (var in contexts) {
+  p <- ggplot(reward_rates[[var]], aes(x = mean_click, fill = factor(.data[[var]]))) +
+    geom_histogram(bins = 30, position = "identity", alpha = 0.6) +
+    labs(x = "Click Through Rate", y = "Frequency", fill = var) +
+    scale_fill_manual(values = colors) +  
+    theme_minimal() +
+    theme(legend.position = "top") 
+  
+  ggsave(filename = paste0("item_reward_rate_", var, ".pdf"), plot = p)
+  print(p)
+}
+
 
 # compute mean reward rate
 mean(df_zozo$click)
