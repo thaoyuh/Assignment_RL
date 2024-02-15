@@ -320,7 +320,7 @@ for (k in c(2,4)){ # Clunky because of stupid R and stupid environment variable 
   
   summary(history_TS_contextual)
 }
-
+ 
 
 
 # Plotting the cumulative rewards of all three Thompson Sampling algorithms:
@@ -446,33 +446,45 @@ df_random_agg <- cum_reward(df_random)
 # save the results
 write.csv(df_random, "df_random_max.csv")
 
-# plot the four results in the same plot
+
+  
+# Plotting the cumulative rewards of all bandits in one plot.
 plot <- ggplot() +
     geom_line(data = df_TS_vanilla_agg, aes(x = t, y = mean_cum_reward, color = "TS Vanilla")) +
-    geom_ribbon(data = df_TS_vanilla_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci, fill = "TS Vanilla"), alpha = 0.1) +
-    geom_line(data = df_TS_contextual_agg, aes(x = t, y = mean_cum_reward, color = "TS Contextual")) +
-    geom_ribbon(data = df_TS_contextual_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci, fill = "TS Contextual"), alpha = 0.1) +
+    geom_ribbon(data = df_TS_vanilla_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "green", alpha = 0.1) +
+    geom_line(data = df_TS_contextual_agg$kmeans_2_clusters, aes(x = t, y = mean_cum_reward, color = "TS Context k=2")) +
+    geom_ribbon(data = df_TS_contextual_agg$kmeans_2_clusters, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "blue", alpha = 0.1) +
+    geom_line(data = df_TS_contextual_agg$kmeans_4_clusters, aes(x = t, y = mean_cum_reward, color = "TS Context k=4")) +
+    geom_ribbon(data = df_TS_contextual_agg$kmeans_4_clusters, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "cyan", alpha = 0.1) +
+  
     geom_line(data = df_UCB_vanilla_agg, aes(x = t, y = mean_cum_reward, color = "UCB Vanilla")) +
-    geom_ribbon(data = df_UCB_vanilla_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci, fill = "UCB Vanilla"), alpha = 0.1) +
-    geom_line(data = df_UCB_contextual_agg, aes(x = t, y = mean_cum_reward, color = "UCB Contextual")) +
-    geom_ribbon(data = df_UCB_contextual_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci, fill = "UCB Contextual"), alpha = 0.1) +
+    geom_ribbon(data = df_UCB_vanilla_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "orange", alpha = 0.1) +
+    geom_line(data = df_UCB_contextual_agg$kmeans_2_clusters, aes(x = t, y = mean_cum_reward, color = "UCB Context k=2")) +
+    geom_ribbon(data = df_UCB_contextual_agg$kmeans_2_clusters, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "red", alpha = 0.1) +
+    geom_line(data = df_UCB_contextual_agg$kmeans_4_clusters, aes(x = t, y = mean_cum_reward, color = "UCB Context k=4")) +
+    geom_ribbon(data = df_UCB_contextual_agg$kmeans_4_clusters, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "purple", alpha = 0.1) +
+  
     geom_line(data = df_random_agg, aes(x = t, y = mean_cum_reward, color = "Random")) +
     geom_ribbon(data = df_random_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci, fill = "Random"), alpha = 0.1) +
-    scale_color_manual(name = "Algorithm", values = c("TS Vanilla" = "orange", "TS Contextual" = "blue", "UCB Vanilla" = "green", "UCB Contextual" = "red", "Random" = "gray47")) +
-    scale_fill_manual(name = "Algorithm", values = c("TS Vanilla" = "orange", "TS Contextual" = "blue", "UCB Vanilla" = "green", "UCB Contextual" = "red", "Random" = "gray47"), guide = FALSE) +
+  
+    scale_color_manual(name = "Algorithm", values = c("TS Vanilla" = "green", "TS Context k=2" = "blue", "TS Context k=4" = "cyan",
+                                                      "UCB Vanilla" = "orange", "UCB Context k=2" = "red", "UCB Context k=4" = "purple", 
+                                                      "Random" = "gray47")) +
+    scale_fill_manual(name = "Algorithm", values = c("TS Vanilla" = "green", "TS Context k=2" = "blue", "TS Context k=4" = "cyan",
+                                                     "UCB Vanilla" = "orange", "UCB Context k=2" = "red", "UCB Context k=4" = "purple", 
+                                                     "Random" = "gray47"), guide = FALSE) +
     labs(x = "Rounds", y = "Cumulative Reward") +
     xlim(0, length(df_TS_vanilla_agg$t)) +
     ylim(0, 55) +
     theme_bw() +
-    theme(text = element_text(size = 18))
+    theme(text = element_text(size = 18), legend.position = "right")
 
-# set the size of the plot and save it
-png("reward.png", width = 1000, height = 800)
+
+ggsave("reward.pdf", plot)
 print(plot)
-dev.off()
 
-# save the plot
-ggsave("reward.png", plot, width = 10, height = 8)
+
+dev.off()        # What does this do?
 
 #############################
 ## Thompson Sampling sensitivity analysis
