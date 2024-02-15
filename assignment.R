@@ -74,8 +74,6 @@ mean(df_zozo$hour_dec)
 
 
 
-
-
 #################################
 ## Click rates per level of context.
 
@@ -333,6 +331,7 @@ p <- ggplot(df_TS_vanilla_agg, aes(x = t, y = mean_cum_reward)) +
                                                     "Peak hours + two user feature clusters" = "blue", 
                                                     "Peak hours + four user feature clusters" = "green")) +
   labs(x = "Rounds", y = "Cumulative Reward") +
+  ylim(0, 75) +
   theme_bw() +
   theme(text = element_text(size = 18), legend.position = "top")
 
@@ -398,6 +397,7 @@ p <- ggplot(df_UCB_vanilla_agg, aes(x = t, y = mean_cum_reward)) +
                                                     "Peak hours + two user feature clusters" = "blue", 
                                                     "Peak hours + four user feature clusters" = "green")) +
   labs(x = "Rounds", y = "Cumulative Reward") +
+  ylim(0, 75) +
   theme_bw() +
   theme(text = element_text(size = 18), legend.position = "top")
 
@@ -465,7 +465,7 @@ plot <- ggplot() +
                                                      "Random" = "gray47"), guide = FALSE) +
     labs(x = "Rounds", y = "Cumulative Reward") +
     xlim(0, length(df_TS_vanilla_agg$t)) +
-    ylim(0, 55) +
+    ylim(0, 75) +
     theme_bw() +
     theme(text = element_text(size = 18), legend.position = "right")
 
