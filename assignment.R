@@ -156,8 +156,6 @@ for (var in c("total", contexts)) {
 }
 
 
-
-
 #############################
 ## Vanilla Thompson Sampling
 #############################
@@ -265,9 +263,9 @@ cluster_columns <- c("user_feature_0_2", "user_feature_0_3", "user_feature_0_4",
                      "user_feature_3_8", "user_feature_3_9", "user_feature_3_10")
 
 
-df_zozo <- as.data.frame(df_zozo)   # How has this not been done earlier? Not moved it up yet because testing requires reloading. 
+df_zozo <- as.data.frame(df_zozo)   # How has this not been done earlier? Not moved it up yet because test running requires reloading. 
 
-df_zozo["kmeans_2_clusters"] <- kmeans(dff_zozo[, cluster_columns], centers = 2)$cluster
+df_zozo["kmeans_2_clusters"] <- kmeans(df_zozo[, cluster_columns], centers = 2)$cluster
 df_zozo["kmeans_4_clusters"] <- kmeans(df_zozo[, cluster_columns], centers = 4)$cluster
 
 # One-hot encoding the 4 level dummies.
@@ -320,7 +318,6 @@ for (k in c(2,4)){ # Clunky because of stupid R and stupid environment variable 
   
   summary(history_TS_contextual)
 }
- 
 
 
 # Plotting the cumulative rewards of all three Thompson Sampling algorithms:
@@ -342,9 +339,6 @@ p <- ggplot(df_TS_vanilla_agg, aes(x = t, y = mean_cum_reward)) +
 
 ggsave(filename = "Contextual_TS_clusters_cumrewards.pdf", plot = p)
 print(p)
-
-
-
 
 
 ######################################
@@ -391,7 +385,6 @@ for (k in c(2,4)){ # Clunky because of stupid R and stupid environment variable 
   summary(history_UCB_contextual)
 }
 
-
 # Plotting the cumulative rewards of all three UCB algorithms:
 # Vanilla, k2, and k4.
 p <- ggplot(df_UCB_vanilla_agg, aes(x = t, y = mean_cum_reward)) +
@@ -413,11 +406,8 @@ ggsave(filename = "Contextual_UCB_clusters_cumrewards.pdf", plot = p)
 print(p)
 
 
-
-########################################################## Above should be done.
-## !!!!!!!!!!!!!!!!! WORK IN PROGRESS !!!!!!!!!!!!!!!!! ##  
-########################################################## Below is in progress.
-
+######################################
+# Random policy benchmark
 
 # run a random policy to compare the results
 bandit_random <- OfflineReplayEvaluatorBandit$new(click ~ item_id, df_zozo)
