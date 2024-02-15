@@ -322,27 +322,26 @@ for (k in c(2,4)){ # Clunky because of stupid R and stupid environment variable 
 }
 
 
+
 # Plotting the cumulative rewards of all three Thompson Sampling algorithms:
 # Vanilla, k2, and k4.
 p <- ggplot(df_TS_vanilla_agg, aes(x = t, y = mean_cum_reward)) +
-  geom_line(aes(y = mean_cum_reward), color = "orange") +
+  geom_line(aes(y = mean_cum_reward, color = "Vanilla")) +
   geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci), fill = "orange", alpha = 0.1) +
-  geom_line(data = df_TS_contextual_agg["kmeans_2_clusters"], aes(x = t, y = mean_cum_reward), color = "blue") +
-  geom_ribbon(data = df_TS_contextual_agg["kmeans_2_clusters"], aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "blue", alpha = 0.1) +
-  geom_line(data = df_TS_contextual_agg["kmeans_4_clusters"], aes(x = t, y = mean_cum_reward), color = "green") +
-  geom_ribbon(data = df_TS_contextual_agg["kmeans_4_clusters"], aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "green", alpha = 0.1) +
+  geom_line(data = df_TS_contextual_agg$kmeans_2_clusters, aes(x = t, y = mean_cum_reward, color = "Peak hours + two user feature clusters")) +
+  geom_ribbon(data = df_TS_contextual_agg$kmeans_2_clusters, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "blue", alpha = 0.1) +
+  geom_line(data = df_TS_contextual_agg$kmeans_4_clusters, aes(x = t, y = mean_cum_reward, color = "Peak hours + four user feature clusters")) +
+  geom_ribbon(data = df_TS_contextual_agg$kmeans_4_clusters, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "green", alpha = 0.1) +
   scale_color_manual(name = "Algorithm", values = c("Vanilla" = "orange", 
                                                     "Peak hours + two user feature clusters" = "blue", 
                                                     "Peak hours + four user feature clusters" = "green")) +
   labs(x = "Rounds", y = "Cumulative Reward") +
-  theme_minimal() +
+  theme_bw() +
   theme(text = element_text(size = 18), legend.position = "top")
 
 
-ggsave(filename = "TS_contextual_clusters_cumrewards.pdf", plot = p)
+ggsave(filename = "Contextual_TS_clusters_cumrewards.pdf", plot = p)
 print(p)
-
-
 
 
 
@@ -393,24 +392,24 @@ for (k in c(2,4)){ # Clunky because of stupid R and stupid environment variable 
 }
 
 
-# Plotting the cumulative rewards of all three Thompson Sampling algorithms:
+# Plotting the cumulative rewards of all three UCB algorithms:
 # Vanilla, k2, and k4.
 p <- ggplot(df_UCB_vanilla_agg, aes(x = t, y = mean_cum_reward)) +
-  geom_line(aes(y = mean_cum_reward), color = "orange") +
+  geom_line(aes(y = mean_cum_reward, color = "Vanilla")) +
   geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci), fill = "orange", alpha = 0.1) +
-  geom_line(data = df_UCB_contextual_agg["kmeans_2_clusters"], aes(x = t, y = mean_cum_reward), color = "blue") +
-  geom_ribbon(data = df_UCB_contextual_agg["kmeans_2_clusters"], aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "blue", alpha = 0.1) +
-  geom_line(data = df_UCB_contextual_agg["kmeans_4_clusters"], aes(x = t, y = mean_cum_reward), color = "green") +
-  geom_ribbon(data = df_UCB_contextual_agg["kmeans_4_clusters"], aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "green", alpha = 0.1) +
+  geom_line(data = df_UCB_contextual_agg$kmeans_2_clusters, aes(x = t, y = mean_cum_reward, color = "Peak hours + two user feature clusters")) +
+  geom_ribbon(data = df_UCB_contextual_agg$kmeans_2_clusters, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "blue", alpha = 0.1) +
+  geom_line(data = df_UCB_contextual_agg$kmeans_4_clusters, aes(x = t, y = mean_cum_reward, color = "Peak hours + four user feature clusters")) +
+  geom_ribbon(data = df_UCB_contextual_agg$kmeans_4_clusters, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "green", alpha = 0.1) +
   scale_color_manual(name = "Algorithm", values = c("Vanilla" = "orange", 
                                                     "Peak hours + two user feature clusters" = "blue", 
                                                     "Peak hours + four user feature clusters" = "green")) +
   labs(x = "Rounds", y = "Cumulative Reward") +
-  theme_minimal() +
+  theme_bw() +
   theme(text = element_text(size = 18), legend.position = "top")
 
 
-ggsave(filename = "UCB_contextual_clusters_cumrewards.pdf", plot = p)
+ggsave(filename = "Contextual_UCB_clusters_cumrewards.pdf", plot = p)
 print(p)
 
 
