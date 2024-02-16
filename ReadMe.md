@@ -1,6 +1,7 @@
 ##----------------------------------Read Me------------------------------------
 
 ###----------------Code Files-----------------
+
 toolbox.R :
     Important ploting and calculating cumulative reward function
 TS_manual_Batching.R :
@@ -13,4 +14,5 @@ assignment.R :
     /aggregation analysis of Question b.
     
 ###-------------Data and Figures----------------
+
 The rest of the folder contains data and figures that are output of the codes, most are used in the assignment.
