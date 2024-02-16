@@ -8,7 +8,7 @@ toolbox.R :
 TS_manual_Batching.R :
     Perform TS sensitivity analysis through batching manually (Question b).
     
-UCB_C_Stationarity :     
+UCB_C_Stationarity.Rmd :     
     Sensitivity analysis of UCB through the c paramter (Question b) + automated stationarity
     testing of each arm (Question d).
 
