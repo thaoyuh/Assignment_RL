@@ -57,12 +57,9 @@ df_zozo %>%
     summarise(n = n()) %>%
     arrange(desc(n))
 
-
-
 # Create the variables for hour and day of observation
 df_zozo$day  <- day(df_zozo$timestamp)
 df_zozo$hour <- hour(df_zozo$timestamp)
-
 
 # Create an indicator variable for the "decision hours"
 # Which are defined as 18h and 19h, when there is a clear peak in click rates.
@@ -71,8 +68,6 @@ df_zozo$hour_dec <- ifelse(df_zozo$hour == 18 | df_zozo$hour == 19, 1, 0)
 
 # Only 1.7% of purchases are made in these decision hours.
 mean(df_zozo$hour_dec)
-
-
 
 #################################
 ## Click rates per level of context.
@@ -153,12 +148,9 @@ for (var in c("total", contexts)) {
   }
 }
 
-
 #############################
 ## Vanilla Thompson Sampling
 #############################
-
-# Vanilla Thompson Sampling
 
 # initialize the bandit
 bandit_TS_vanilla <- OfflineReplayEvaluatorBandit$new(click ~ item_id, df_zozo)
@@ -168,7 +160,7 @@ size_sim <- 8000000
 n_sim <- 10
 
 # here we define the Thompson Sampling policy object
-### !!
+### 
 # Parameters for tuning:
 # - alpha: the alpha parameter of the beta distribution
 # - beta: the beta parameter of the beta distribution
@@ -201,15 +193,13 @@ df_TS_vanilla_agg <- cum_reward(df_TS_vanilla)
 # save the results
 write.csv(df_TS_vanilla, "df_TS_vanilla_max.csv")
 
-
-
 #############################
 ## Vanilla UCB
 #############################
 bandit_UCB_vanilla <- OfflineReplayEvaluatorBandit$new(click ~ item_id, df_zozo)
 
 # initialize the policy
-### !!
+### 
 # Parameters for tuning:
 # - alpha: the coefficient for the confidence interval
 alpha <- 0.2
@@ -241,15 +231,9 @@ df_UCB_vanilla_agg <- cum_reward(df_UCB_vanilla)
 # save the results
 write.csv(df_UCB_vanilla, "df_UCB_vanilla_max.csv")
 
-
-
-
 ######################################
 ## Contextual analysis
 ######################################
-
-
-
 ## Clustering on user features. 
 
 cluster_columns <- c("user_feature_0_2", "user_feature_0_3", "user_feature_0_4",
@@ -273,14 +257,13 @@ df_zozo <- dummy_cols(df_zozo, select_columns = c("kmeans_4_clusters"), remove_f
 ######################################
 # Contextual Thompson Sampling
 
-
-# Initializing bandits. Clunky because of stupid R and stupid environment variable bandit.
+# Initializing bandits.
 bandit_TS_contextual_k2 <- OfflineReplayEvaluatorBandit$new(click ~ item_id | hour_dec + kmeans_2_clusters, df_zozo)
 bandit_TS_contextual_k4 <- OfflineReplayEvaluatorBandit$new(click ~ item_id | hour_dec + kmeans_4_clusters_2 + kmeans_4_clusters_3 + kmeans_4_clusters_4, df_zozo)
 
 df_TS_contextual_agg <- list()    # Initializing list to store cumulative rewards.
 
-for (k in c(2,4)){ # Clunky because of stupid R and stupid environment variable bandit.
+for (k in c(2,4)){ 
   
   # Initializing policy
   policy_TS_contextual <- ContextualLinTSPolicy$new()
@@ -288,7 +271,7 @@ for (k in c(2,4)){ # Clunky because of stupid R and stupid environment variable 
   # Create an agent to make arm choice based on the policy
   agent_TS_contextual <- Agent$new(
     policy_TS_contextual, # Adding policy
-    # Adding bandit. Clunky because of stupid R and stupid environment variable bandit.
+    # Adding bandit. 
     if (k == 2){bandit_TS_contextual_k2} else{bandit_TS_contextual_k4}
   ) 
   
@@ -305,7 +288,7 @@ for (k in c(2,4)){ # Clunky because of stupid R and stupid environment variable 
   df_TS_contextual <- history_TS_contextual$data %>%
     select(t, sim, choice, reward, agent)
   
-  # Saving the results. Clunky because of stupid R and stupid environment variable bandit.
+  # Saving the results. 
   if (k == 2){
     write.csv(df_TS_contextual, paste0("df_TS_contextual_max_kmeans_2_clusters.csv"))
     df_TS_contextual_agg["kmeans_2_clusters"] <- list(cum_reward(df_TS_contextual))
@@ -316,7 +299,6 @@ for (k in c(2,4)){ # Clunky because of stupid R and stupid environment variable 
   
   summary(history_TS_contextual)
 }
-
 
 # Plotting the cumulative rewards of all three Thompson Sampling algorithms:
 # Vanilla, k2, and k4.
@@ -347,15 +329,14 @@ bandit_UCB_contextual_k2 <- OfflineReplayEvaluatorBandit$new(click ~ item_id | h
 bandit_UCB_contextual_k4 <- OfflineReplayEvaluatorBandit$new(click ~ item_id | hour_dec + kmeans_4_clusters_2 + kmeans_4_clusters_3 + kmeans_4_clusters_4, df_zozo)
 
 df_UCB_contextual_agg <- list()    # Initializing list to store cumulative rewards.
-for (k in c(2,4)){ # Clunky because of stupid R and stupid environment variable bandit.
-  
+for (k in c(2,4)){ 
   # Initializing policy
   policy_UCB_contextual <- LinUCBDisjointOptimizedPolicy$new(alpha = alpha)
   
   # Create an agent to make arm choice based on the policy
   agent_UCB_contextual <- Agent$new(
     policy_UCB_contextual, # Adding policy
-    # Adding bandit. Clunky because of stupid R and stupid environment variable bandit.
+    # Adding bandit. 
     if (k == 2){bandit_UCB_contextual_k2} else{bandit_UCB_contextual_k4}
   ) 
   
@@ -372,7 +353,7 @@ for (k in c(2,4)){ # Clunky because of stupid R and stupid environment variable 
   df_UCB_contextual <- history_UCB_contextual$data %>%
     select(t, sim, choice, reward, agent)
   
-  # Saving the results. Clunky because of stupid R and stupid environment variable bandit.
+  # Saving the results. 
   if (k == 2){
     write.csv(df_UCB_contextual, paste0("df_UCB_contextual_max_kmeans_2_clusters.csv"))
     df_UCB_contextual_agg["kmeans_2_clusters"] <- list(cum_reward(df_UCB_contextual))
@@ -408,7 +389,6 @@ print(p)
 
 ######################################
 # Random policy benchmark
-
 # run a random policy to compare the results
 bandit_random <- OfflineReplayEvaluatorBandit$new(click ~ item_id, df_zozo)
 
@@ -436,8 +416,6 @@ df_random_agg <- cum_reward(df_random)
 # save the results
 write.csv(df_random, "df_random_max.csv")
 
-
-  
 # Plotting the cumulative rewards of all bandits in one plot.
 plot <- ggplot() +
     geom_line(data = df_TS_vanilla_agg, aes(x = t, y = mean_cum_reward, color = "TS Vanilla")) +
@@ -473,7 +451,6 @@ plot <- ggplot() +
 ggsave("rewards_all_together.pdf", plot)
 print(plot)
 
-
 # Plotting the cumulative rewards of all bandits in one plot.
 plot <- ggplot() +
   geom_line(data = df_TS_vanilla_agg, aes(x = t, y = mean_cum_reward, color = "TS Vanilla")) +
@@ -499,8 +476,6 @@ plot <- ggplot() +
 
 ggsave("rewards_TS_and_random.pdf", plot)
 print(plot)
-
-
 
 # Plotting the cumulative rewards of all bandits in one plot.
 plot <- ggplot() +
@@ -528,11 +503,7 @@ plot <- ggplot() +
 ggsave("rewards_UCB_and_random.pdf", plot)
 print(plot)
 
-
-
-
-
-dev.off()        # What does this do?
+dev.off()   
 
 #############################
 ## Thompson Sampling sensitivity analysis
@@ -712,7 +683,6 @@ sim_UCB_vanilla_2 <- Simulator$new(agent_UCB_vanilla_2, # set our agent
 ) # simulate it n_sim times
 
 history_UCB_vanilla_1outof2 <- sim_UCB_vanilla_1$run()
-
 history_UCB_vanilla_2outof2 <- sim_UCB_vanilla_2$run()
 
 # save rdata
@@ -726,12 +696,9 @@ load("history_UCB_vanilla_2outof2.RData")
 # gather results
 df_UCB_vanilla_1outof2 <- history_UCB_vanilla_1outof2$data %>%
     select(t, sim, choice, reward, agent)
-
 df_UCB_vanilla_2outof2 <- history_UCB_vanilla_2outof2$data %>%
     select(t, sim, choice, reward, agent)  
-
 df_UCB_vanilla_1outof2_agg <- cum_reward(df_UCB_vanilla_1outof2)
-
 df_UCB_vanilla_2outof2_agg <- cum_reward(df_UCB_vanilla_2outof2)
 
 # plot the two results and df_UCB_vanilla_agg in the same plot
@@ -848,7 +815,6 @@ plot1 <- ggplot() +
     labs(title = "All rounds")
 
 # do the same analysis with only the first 1000 rounds
-
 exposure_random <- df_random %>%
     filter(t <= 1000) %>%
     group_by(choice) %>%
@@ -878,7 +844,6 @@ ggsave("exposures.png", combined_plot, width = 16, height = 8)
 # fairness for users (compare how the best arm selected by the bandit performs for different user features)
 
 # Vanilla UCB
-
 # turn user_feature_0,1,2,3 into dummies
 df_zozo <- dummy_cols(df_zozo, select_columns = c("user_feature_0", "user_feature_1",
     "user_feature_2", "user_feature_3"), remove_first_dummy = TRUE)
@@ -935,21 +900,17 @@ df_UCB_vanilla <- history_UCB_vanilla$data
 # transform the dummy variables (X.2, X.3, X.4) into one variable
 df_UCB_vanilla <- df_UCB_vanilla %>%
     mutate(user_feature_0 = ifelse(X.2 == 1, 2, ifelse(X.3 == 1, 3, ifelse(X.4 == 1, 4, 1))))
-
 # transform the dummy variables (X.5, X.6, X.7, X.8, X.9) into one variable
 df_UCB_vanilla <- df_UCB_vanilla %>%
     mutate(user_feature_1 = ifelse(X.5 == 1, 2, ifelse(X.6 == 1, 3, ifelse(X.7 == 1, 4, ifelse(X.8 == 1, 5, ifelse(X.9 == 1, 6, 1))))))
-
 # transform the dummy variables (X.10, X.11, X.12, X.13, X.14, X.15, X.16, X.17, X.18) into one variable
 df_UCB_vanilla <- df_UCB_vanilla %>%
     mutate(user_feature_2 = ifelse(X.10 == 1, 2, ifelse(X.11 == 1, 3, ifelse(X.12 == 1, 4, ifelse(X.13 == 1, 5, ifelse(X.14 == 1, 6, ifelse(X.15 == 1, 7, ifelse(X.16 == 1, 8, ifelse(X.17 == 1, 9, ifelse(X.18 == 1, 10, 1))))))))))
-
 # transform the dummy variables (X.19, X.20, X.21, X.22, X.23, X.24, X.25, X.26, X.27) into one variable
 df_UCB_vanilla <- df_UCB_vanilla %>%
     mutate(user_feature_3 = ifelse(X.19 == 1, 2, ifelse(X.20 == 1, 3, ifelse(X.21 == 1, 4, ifelse(X.22 == 1, 5, ifelse(X.23 == 1, 6, ifelse(X.24 == 1, 7, ifelse(X.25 == 1, 8, ifelse(X.26 == 1, 9, ifelse(X.27 == 1, 10, 1))))))))))
 
-# compare fairness across user_feature_0
-
+#-----compare fairness across user_feature_0
 # compute the reward rate for different user_feature_0
 df1_reward <- df_UCB_vanilla %>%
     group_by(user_feature_0) %>%
