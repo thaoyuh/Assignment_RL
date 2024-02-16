@@ -22,23 +22,83 @@ pacman::p_load(dplyr,
                latex2exp,
                xtable,
                urca,
-               lubridate
+               lubridate, 
+               contextual
                )
 
 # If you do not have tinytex installed, uncomment the command below for knitting the pdf
 #tinytex::install_tinytex()
+set.seed(0)
 
+source("toolbox.R")
 ```
 
 ```{r, load data}
 # reads in data full
-dfZozo40 <- read.csv('zozo_Context_40items.csv')
 dfZozo80 <- read.csv('zozo_Context_80items.csv')
+```
+
+\section*{Question b)}
+
+
+```{r UCB sensitivity}
+n_sim = 5
+size_sim = 8000000
+alpha_values <- c(0.001, 0.1, 1, 5, 10)
+l_df_results <- vector("list", length(alpha_values))
+l_df_agg <- vector("list", length(alpha_values))
+
+# Loop over each alpha value
+for (i in seq_along(alpha_values)) {
+    bandit_UCB_vanilla <- OfflineReplayEvaluatorBandit$new(click ~ item_id, dfZozo80)
+    policy_UCB_vanilla <- LinUCBDisjointOptimizedPolicy$new(alpha = alpha_values[i])
+    agent_UCB_vanilla <- Agent$new(
+        policy_UCB_vanilla, # add policy
+        bandit_UCB_vanilla
+    ) # add bandit
+    # initialize the simulator
+    sim_UCB_vanilla <- Simulator$new(agent_UCB_vanilla, # set our agent
+        horizon = size_sim, # set size of sim
+        do_parallel = TRUE, # run in parallel
+        simulations = n_sim)
+    
+    # run the simulation
+    history_UCB_vanilla <- sim_UCB_vanilla$run()
+    print(i)
+    
+    # gather results
+    df_UCB_vanilla <- history_UCB_vanilla$data %>%
+        select(t, sim, choice, reward, agent)
+    l_df_results[[i]] <- df_UCB_vanilla
+    
+    df_UCB_vanilla_agg <- cum_reward(df_UCB_vanilla)
+    l_df_agg[[i]] <- df_UCB_vanilla_agg
+}
+
+# plot the four results in the same plot
+plot_UCB_c <- ggplot() +
+    geom_line(data = l_df_agg[[1]], aes(x = t, y = mean_cum_reward, color = "0.001")) +
+    geom_ribbon(data = l_df_agg[[1]], aes(x = t, ymin = lower_ci, ymax = upper_ci, fill = "0.001"), alpha = 0.1) +
+    geom_line(data = l_df_agg[[2]], aes(x = t, y = mean_cum_reward, color = "0.1")) +
+    geom_ribbon(data = l_df_agg[[2]], aes(x = t, ymin = lower_ci, ymax = upper_ci, fill = "0.1"), alpha = 0.1) +
+    geom_line(data = l_df_agg[[3]], aes(x = t, y = mean_cum_reward, color = "1")) +
+    geom_ribbon(data = l_df_agg[[3]], aes(x = t, ymin = lower_ci, ymax = upper_ci, fill = "1"), alpha = 0.1) +
+    geom_line(data = l_df_agg[[4]], aes(x = t, y = mean_cum_reward, color = "5")) +
+    geom_ribbon(data = l_df_agg[[4]], aes(x = t, ymin = lower_ci, ymax = upper_ci, fill = "5"), alpha = 0.1) +
+    geom_line(data = l_df_agg[[5]], aes(x = t, y = mean_cum_reward, color = "10")) +
+    geom_ribbon(data = l_df_agg[[5]], aes(x = t, ymin = lower_ci, ymax = upper_ci, fill = "10"), alpha = 0.1) +
+    scale_color_manual(name = "c =", values = c("0.001" = "orange", "0.1" = "blue", "1" = "green", "5" = "red", "10" = "gray47")) +
+    scale_fill_manual(name = "c =", values = c("0.001" = "orange", "0.1" = "blue", "1" = "green", "5" = "red", "10" = "gray47"), guide = FALSE) +
+    labs(x = "Rounds", y = "Cumulative Reward", c = "Legend") + # Change the legend title to "c"
+    theme_bw() + xlim(0,16500)+ ylim(0,89)
+    theme(text = element_text(size = 12))
+
+plot_UCB_c
 ```
 
 \section*{Question d)}
 ```{r}
-# Visualization
+#-------------------------Visualization---------------------------------------
 # Group by date and count clicks
 click_proba <- dfZozo80 %>%
   group_by(date) %>%
@@ -47,7 +107,7 @@ click_proba <- dfZozo80 %>%
 # Create the plot
 ggplot(data = click_proba, aes(x = date, y = click_proba)) +
   geom_line() +
-  labs(x = "Date", y = "Click Proba", title = "Click Proba by Date")
+  labs(x = "Date", y = "Click Proba", title = "Click Proba by Date") + ylim(0, 0.005)
 
 # Group by hour and count clicks
 clicks_by_hour <- dfZozo80 %>%
@@ -57,7 +117,7 @@ clicks_by_hour <- dfZozo80 %>%
 # Plot
 ggplot(data = clicks_by_hour, aes(x = hour, y = click_proba)) +
   geom_line() +
-  labs(x = "Hour of the Day", y = "Click Proba", title = "Click Proba by Hour")
+  labs(x = "Hour of the Day", y = "Click Proba", title = "Click Proba by Hour")+ ylim(0, 0.005)
 
 
 # Group by hour and date, and count clicks
@@ -78,22 +138,21 @@ clicks_by_hour_date$hour_date <- factor(clicks_by_hour_date$hour_date, levels = 
 # Plot click_count by hour_date
 ggplot(data = clicks_by_hour_date, aes(x = hour_date, y = click_proba, group = 1)) +
   geom_line() +
-  labs(x = "Hour and Date", y = "Click Proba", title = "Click Proba by Hour and Date")
+  labs(x = "Hour and Date", y = "Click Probability", title = "Click Probability by Hour and Date")
++  theme(axis.ticks.x = element_blank())
+
 ```
 
 
 ```{r }
-# Load necessary libraries
-library(lubridate)
+#-------------------------Automated Staionarity Tests---------------------------------------
 
-# Assuming your dataframe is named dfZozo40
-# Convert timestamp column to date
 dfZozo80$date <- as.Date(dfZozo80$timestamp)
 dfZozo80$hour <- hour(dfZozo80$timestamp)
 
 # Group by items per hour and item, count the proportion of 1 occurrences in the click column
 result <- dfZozo80 %>%
-  group_by(date,hour, item_id) %>%
+  group_by(hour, item_id) %>% # change the group_by parameter depending on hour or day
   summarize(proportion_1 = mean(click == 1, na.rm = TRUE)) %>%
   ungroup() %>%
   spread(key = item_id, value = proportion_1, fill = 0)
@@ -103,9 +162,6 @@ print(result)
 ```
 
 ```{r stationarity testing} 
-# Load necessary libraries
-library(urca)
-
 # Initialize an empty dataframe to store test results
 test_results_df <- data.frame()
 
@@ -142,5 +198,5 @@ combined_df <- as.data.frame(split_dfs)
 
 # Print the dataframe and generate Latex code
 print(combined_df)
-#print(xtable(combined_df), include.rownames = FALSE)
+print(xtable(combined_df), include.rownames = FALSE)
 ```
