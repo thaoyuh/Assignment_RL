@@ -4,7 +4,7 @@
 if (!require("pacman")) install.packages("pacman")
 
 pacman::p_load(
-    knitr, ggplot2, png,
+    knitr, ggplot2, ggpubr, png,
     tidyverse, rlist, contextual,
     lubridate, zoo, roll,
     fastDummies, gridExtra,
@@ -83,6 +83,7 @@ contexts <- c("position", "user_feature_0", "user_feature_1", "user_feature_2", 
 # Next, we compute the click rate per item for each level of the categorical contexts.
 # Here we also count the number of observations for each level.
 reward_rates <- list()
+plots <- list()
 for (var in contexts) {
   reward_rates[[var]] <- aggregate(df_zozo[["click"]], by = list(df_zozo[[var]]),  function(x) c(mean = mean(x), count = length(x)))
   reward_rates[[var]] <- cbind(reward_rates[[var]][["Group.1"]], reward_rates[[var]][["x"]])
@@ -103,8 +104,23 @@ for (var in contexts) {
     theme(legend.position = "top")
   
   ggsave(filename = paste0("mean_clicks_of_", var, ".pdf"), plot = p)
+  plots[[var]] <- p
 }
 
+user_feature_plots = plots[c("user_feature_0", "user_feature_1", "user_feature_2", "user_feature_3")]
+user_feature_plot <- ggpubr::ggarrange(plotlist = user_feature_plots, 
+                               ncol = 2, nrow = 2,
+                               common.legend = TRUE, align = "hv"
+                               )
+ggsave(filename = paste0("plot_grid_user_feature_plot.pdf"), plot = user_feature_plot, width = 12)
+user_feature_plot
+
+position_and_time_plots = plots[contexts[!grepl("user_feature", contexts)]]
+position_and_time_plot <- ggpubr::ggarrange(plotlist = position_and_time_plots, 
+                               ncol = 3, nrow = 1, common.legend = TRUE)
+ggsave(filename = paste0("plot_grid_position_and_time.pdf"), plot = position_and_time_plot, 
+       width = 12, height = 4)
+position_and_time_plot
 
 #################################
 ## Reward rates per item per level of context.
@@ -116,7 +132,6 @@ for (var in contexts) {
 
 # Compute the reward rate for each item. Both on an aggregate level and per 
 # level of each context variable. Next, print histograms.
-
 reward_rates_by_item <- list()
 for (var in c("total", contexts)) {
   if (var != "total"){
@@ -451,7 +466,8 @@ plot <- ggplot() +
 ggsave("rewards_all_together.pdf", plot)
 print(plot)
 
-# Plotting the cumulative rewards of all bandits in one plot.
+
+# Plotting the cumulative rewards of all TS bandits and random in one plot.
 plot <- ggplot() +
   geom_line(data = df_TS_vanilla_agg, aes(x = t, y = mean_cum_reward, color = "TS Vanilla")) +
   geom_ribbon(data = df_TS_vanilla_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "green", alpha = 0.1) +
@@ -477,7 +493,7 @@ plot <- ggplot() +
 ggsave("rewards_TS_and_random.pdf", plot)
 print(plot)
 
-# Plotting the cumulative rewards of all bandits in one plot.
+# Plotting the cumulative rewards of all UCB bandits and random in one plot.
 plot <- ggplot() +
   geom_line(data = df_UCB_vanilla_agg, aes(x = t, y = mean_cum_reward, color = "UCB Vanilla")) +
   geom_ribbon(data = df_UCB_vanilla_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "orange", alpha = 0.1) +
@@ -503,7 +519,7 @@ plot <- ggplot() +
 ggsave("rewards_UCB_and_random.pdf", plot)
 print(plot)
 
-dev.off()   
+dev.off()        # What does this do?
 
 #############################
 ## Thompson Sampling sensitivity analysis
