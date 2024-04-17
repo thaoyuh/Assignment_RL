@@ -6,7 +6,7 @@ if (!require("pacman")) install.packages("pacman")
 pacman::p_load(
     knitr, ggplot2, ggpubr, png,
     tidyverse, rlist, contextual,
-    lubridate, zoo, roll,
+    lubridate, zoo, roll, scales,
     fastDummies, gridExtra,
     stats, data.table, formula.tools
 )
@@ -98,7 +98,7 @@ for (var in contexts) {
                        limits = c(0, 0.0075),
                        sec.axis = sec_axis(~. * 1e8, name = "Number of observations", 
                                            labels = function(x) format(x, scientific = FALSE, big.mark = ","))) +
-    scale_x_continuous(labels = function(x) format(x, scientific = FALSE)) +
+    scale_x_continuous(breaks= extended_breaks()) +
     labs(y = "Mean click rate", color = NULL) +
     theme_minimal() +
     theme(legend.position = "top")
@@ -115,12 +115,55 @@ user_feature_plot <- ggpubr::ggarrange(plotlist = user_feature_plots,
 ggsave(filename = paste0("plot_grid_user_feature_plot.pdf"), plot = user_feature_plot, width = 12)
 user_feature_plot
 
-position_and_time_plots = plots[contexts[!grepl("user_feature", contexts)]]
+position_and_time_plots = plots[contexts[!grepl(c("user_feature", "kmeans"), contexts)]]
 position_and_time_plot <- ggpubr::ggarrange(plotlist = position_and_time_plots, 
                                ncol = 3, nrow = 1, common.legend = TRUE)
 ggsave(filename = paste0("plot_grid_position_and_time.pdf"), plot = position_and_time_plot, 
        width = 12, height = 4)
 position_and_time_plot
+
+
+
+
+cluster_contexts <- c("kmeans_2_clusters", "kmeans_4_clusters")
+
+
+reward_rates_clusters <- list()
+plots <- list()
+for (var in cluster_contexts) {
+  reward_rates_clusters[[var]] <- aggregate(df_zozo[["click"]], by = list(df_zozo[[var]]),  function(x) c(mean = mean(x), count = length(x)))
+  reward_rates_clusters[[var]] <- cbind(reward_rates_clusters[[var]][["Group.1"]], reward_rates_clusters[[var]][["x"]])
+  colnames(reward_rates_clusters[[var]]) <- c(var, "mean", "count")
+  reward_rates_clusters[[var]] <- as.data.frame(reward_rates_clusters[[var]])
+  
+  # Here we plot the mean click rate and number of observations per level of context.
+  p <- ggplot(reward_rates_clusters[[var]], aes_string(x = var)) +
+    geom_line(aes(y = mean, color = "Mean click rate")) +
+    geom_line(aes(y = count/1.5e8, color = "Number of observations"), linetype = "dashed") +
+    scale_y_continuous(name = "Mean click rate",
+                       limits = c(0, 0.0075),
+                       sec.axis = sec_axis(~. * 1.5e8, name = "Number of observations", 
+                                           labels = function(x) format(x, scientific = FALSE, big.mark = ","))) +
+    scale_x_continuous(labels = function(x) format(round(x), scientific = FALSE), breaks= extended_breaks()) +
+    labs(y = "Mean click rate", color = NULL) +
+    theme_minimal() +
+    theme(legend.position = "top")
+  
+  ggsave(filename = paste0("mean_clicks_of_", var, ".pdf"), plot = p)
+  plots[[var]] <- p
+}
+
+
+cluster_plots = plots[c("kmeans_2_clusters", "kmeans_4_clusters")]
+cluster_plot <- ggpubr::ggarrange(plotlist = cluster_plots, 
+                                       ncol = 2, nrow = 1,
+                                       common.legend = TRUE, align = "hv"
+)
+ggsave(filename = paste0("plot_grid_cluster_plot.pdf"), plot = cluster_plot, width = 12, height = 6)
+cluster_plot
+
+
+
 
 #################################
 ## Reward rates per item per level of context.
@@ -468,20 +511,20 @@ print(plot)
 
 
 # Plotting the cumulative rewards of all TS bandits and random in one plot.
-plot <- ggplot() +
+rewards_TS_and_random_plot <- ggplot() +
   geom_line(data = df_TS_vanilla_agg, aes(x = t, y = mean_cum_reward, color = "TS Vanilla")) +
-  geom_ribbon(data = df_TS_vanilla_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "green", alpha = 0.1) +
+  geom_ribbon(data = df_TS_vanilla_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "orange", alpha = 0.1) +
   geom_line(data = df_TS_contextual_agg$kmeans_2_clusters, aes(x = t, y = mean_cum_reward, color = "TS Context k=2")) +
-  geom_ribbon(data = df_TS_contextual_agg$kmeans_2_clusters, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "blue", alpha = 0.1) +
+  geom_ribbon(data = df_TS_contextual_agg$kmeans_2_clusters, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "cyan", alpha = 0.1) +
   geom_line(data = df_TS_contextual_agg$kmeans_4_clusters, aes(x = t, y = mean_cum_reward, color = "TS Context k=4")) +
-  geom_ribbon(data = df_TS_contextual_agg$kmeans_4_clusters, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "cyan", alpha = 0.1) +
+  geom_ribbon(data = df_TS_contextual_agg$kmeans_4_clusters, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "purple", alpha = 0.1) +
   
   geom_line(data = df_random_agg, aes(x = t, y = mean_cum_reward, color = "Random")) +
   geom_ribbon(data = df_random_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci, fill = "Random"), alpha = 0.1) +
   
-  scale_color_manual(name = "Algorithm", values = c("TS Vanilla" = "orange", "TS Context k=2" = "blue", "TS Context k=4" = "green",
+  scale_color_manual(name = "Algorithm", values = c("TS Vanilla" = "orange", "TS Context k=2" = "cyan", "TS Context k=4" = "purple",
                                                     "Random" = "gray47")) +
-  scale_fill_manual(name = "Algorithm", values = c("TS Vanilla" = "orange", "TS Context k=2" = "blue", "TS Context k=4" = "green",
+  scale_fill_manual(name = "Algorithm", values = c("TS Vanilla" = "orange", "TS Context k=2" = "cyan", "TS Context k=4" = "purple",
                                                    "Random" = "gray47"), guide = FALSE) +
   labs(x = "Rounds", y = "Cumulative Reward") +
   xlim(0, length(df_TS_vanilla_agg$t)) +
@@ -490,13 +533,13 @@ plot <- ggplot() +
   theme(text = element_text(size = 18), legend.position = "right")
 
 
-ggsave("rewards_TS_and_random.pdf", plot)
-print(plot)
+ggsave("rewards_TS_and_random.pdf", rewards_TS_and_random_plot)
+print(rewards_TS_and_random_plot)
 
 # Plotting the cumulative rewards of all UCB bandits and random in one plot.
-plot <- ggplot() +
+rewards_UCB_and_random_plot <- ggplot() +
   geom_line(data = df_UCB_vanilla_agg, aes(x = t, y = mean_cum_reward, color = "UCB Vanilla")) +
-  geom_ribbon(data = df_UCB_vanilla_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "orange", alpha = 0.1) +
+  geom_ribbon(data = df_UCB_vanilla_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "red", alpha = 0.1) +
   geom_line(data = df_UCB_contextual_agg$kmeans_2_clusters, aes(x = t, y = mean_cum_reward, color = "UCB Context k=2")) +
   geom_ribbon(data = df_UCB_contextual_agg$kmeans_2_clusters, aes(x = t, ymin = lower_ci, ymax = upper_ci), fill = "blue", alpha = 0.1) +
   geom_line(data = df_UCB_contextual_agg$kmeans_4_clusters, aes(x = t, y = mean_cum_reward, color = "UCB Context k=4")) +
@@ -505,9 +548,9 @@ plot <- ggplot() +
   geom_line(data = df_random_agg, aes(x = t, y = mean_cum_reward, color = "Random")) +
   geom_ribbon(data = df_random_agg, aes(x = t, ymin = lower_ci, ymax = upper_ci, fill = "Random"), alpha = 0.1) +
   
-  scale_color_manual(name = "Algorithm", values = c("UCB Vanilla" = "orange", "UCB Context k=2" = "blue", "UCB Context k=4" = "green", 
+  scale_color_manual(name = "Algorithm", values = c("UCB Vanilla" = "red", "UCB Context k=2" = "blue", "UCB Context k=4" = "green", 
                                                     "Random" = "gray47")) +
-  scale_fill_manual(name = "Algorithm", values = c("UCB Vanilla" = "orange", "UCB Context k=2" = "blue", "UCB Context k=4" = "green", 
+  scale_fill_manual(name = "Algorithm", values = c("UCB Vanilla" = "red", "UCB Context k=2" = "blue", "UCB Context k=4" = "green", 
                                                    "Random" = "gray47"), guide = FALSE) +
   labs(x = "Rounds", y = "Cumulative Reward") +
   xlim(0, length(df_TS_vanilla_agg$t)) +
@@ -516,10 +559,28 @@ plot <- ggplot() +
   theme(text = element_text(size = 18), legend.position = "right")
 
 
-ggsave("rewards_UCB_and_random.pdf", plot)
-print(plot)
+ggsave("rewards_UCB_and_random.pdf", rewards_UCB_and_random_plot)
+print(rewards_UCB_and_random_plot)
+
+
+
+legend1 <- get_legend(rewards_UCB_and_random_plot)
+legend2 <- get_legend(rewards_TS_and_random_plot)
+legends <- ggpubr::ggarrange(legend1,legend2, nrow = 2)
+reward_plot <- ggpubr::ggarrange(rewards_UCB_and_random_plot, rewards_TS_and_random_plot, 
+                                 ncol = 2, nrow = 1,
+                                 legend.grob = legends, legend = "top"
+)
+ggsave(filename = paste0("reward_plot.pdf"), plot = reward_plot, width = 12, height = 6)
+reward_plot
+
+
+
+
 
 dev.off()        # What does this do?
+
+
 
 #############################
 ## Thompson Sampling sensitivity analysis
