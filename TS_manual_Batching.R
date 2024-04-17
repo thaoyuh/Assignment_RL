@@ -131,8 +131,8 @@ sim_TS <- function(df, n_before_sim, n_sim, interval=1){
 
 # set parameters: observations before start simulation, then how many observations for simulation
 n_before_sim = 100
-n_sim = 16500
-n_runs <- 5
+n_sim = 16500 # equivalent to horizons, the simulation stop at this hoziron when we use all the data as one of the arms runs out of data at this time step
+n_runs <- 10 # equivalent to n_sim in other code files
 
 # set the seed
 set.seed(0)
